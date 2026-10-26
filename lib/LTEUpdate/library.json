@@ -1,0 +1,6 @@
+{
+  "name": "LTEUpdate",
+  "version": "0.1.0",
+  "description": "MeshCore Phase-1 LTE diagnostics and simulated OTA; no flash writer",
+  "build": { "includeDir": "src" }
+}

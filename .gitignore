@@ -1,0 +1,15 @@
+build/
+.pio/
+__pycache__/
+*.log
+*.bin
+*.elf
+*.map
+*.db
+*.sqlite*
+*.pem
+*.key
+.env*
+.local/
+lib/LTEUpdate/src/LTEDeploymentConfig.h
+lib/LTEUpdate/src/TrustAnchor.h

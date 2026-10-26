@@ -1,0 +1,55 @@
+diff --git a/examples/simple_repeater/main.cpp b/examples/simple_repeater/main.cpp
+index d475b13..0b962b0 100644
+--- a/examples/simple_repeater/main.cpp
++++ b/examples/simple_repeater/main.cpp
+@@ -123,6 +123,9 @@ void setup() {
+ }
+ 
+ void loop() {
++#if defined(WITH_LTE_OTA) && WITH_LTE_OTA
++  lte::setStationIdentity(the_mesh.self_id.pub_key, the_mesh.getNodeName(), rtc_clock.getCurrentTime());
++#endif
+   // Handle Serial CLI
+   int len = strlen(command);
+   // `command` must stay NUL-terminated within its bounds. If it ever isn't,
+diff --git a/variants/xiao_s3_wio/XiaoS3WIOBoard.h b/variants/xiao_s3_wio/XiaoS3WIOBoard.h
+index 7ae06a3..d578182 100644
+--- a/variants/xiao_s3_wio/XiaoS3WIOBoard.h
++++ b/variants/xiao_s3_wio/XiaoS3WIOBoard.h
+@@ -3,10 +3,36 @@
+ #include <Arduino.h>
+ #include <helpers/ESP32Board.h>
+ 
++#if defined(WITH_LTE_OTA) && WITH_LTE_OTA
++#include <LTEUpdateService.h>
++#endif
++
+ class XiaoS3WIOBoard : public ESP32Board {
+ public:
+   XiaoS3WIOBoard() { }
+ 
++#if defined(WITH_LTE_OTA) && WITH_LTE_OTA
++  void begin() {
++    ESP32Board::begin();
++    lte::beginService();
++  }
++
++  bool handleCommand(const char* command, uint32_t sender_timestamp, char* reply) override {
++    // Authorization remains in MyMesh::onPeerDataRecv(); serial is privileged.
++    return lte::serviceCommand(command, reply, lte::CliReplySize);
++  }
++
++  void loop() override {
++    ESP32Board::loop();
++    lte::pollService();
++  }
++
++  void sleep(uint32_t secs) override {
++    if (lte::serviceBusy()) { delay(1); return; }
++    ESP32Board::sleep(secs);
++  }
++#endif
++
+   const char* getManufacturerName() const override {
+     return "Xiao S3 WIO";
+   }
