@@ -10,7 +10,7 @@ target = root / 'build' / 'MeshCore'
 if target.exists():
     raise SystemExit('build/MeshCore already exists; use a fresh checkout directory.')
 module = root / 'lib' / 'LTEUpdate'
-for name in ('LTEDeploymentConfig.h', 'TrustAnchor.h'):
+for name in ('LTEDeploymentConfig.h', 'TrustAnchor.h', 'TrustedKey.h'):
     if not (module / 'src' / name).is_file():
         raise SystemExit('Configure lib/LTEUpdate/src/' + name + ' from its example first.')
 target.parent.mkdir(exist_ok=True)

@@ -12,7 +12,7 @@ Error LTEUpdateManager::begin() {
     status.sleepEnabled = config.sleepControl;
     status.error = error;
   }
-  platform.log(error == Error::None ? "Manager initialized; simulation + HTTPS test; no OTA writer" : "Manager configuration rejected");
+  platform.log(error == Error::None ? "Manager initialized; LTE diagnostics and update service" : "Manager configuration rejected");
   platform.log("Power mode: external; EN/PWRKEY untouched");
   platform.log(config.sleepControl ? "Sleep control: enabled; S awake" : "Sleep control: disabled; no S pin access");
   return error;
@@ -21,7 +21,13 @@ Status LTEUpdateManager::snapshot() { Lock guard(platform); return status; }
 bool LTEUpdateManager::cancelled() { Lock guard(platform); return status.cancelRequested; }
 bool LTEUpdateManager::handleCommand(const char* command, char* reply, size_t capacity) {
   Operation operation = Operation::None;
-  if (commandEquals(command, "start lte update")) operation = Operation::SimulateUpdate;
+  if (commandEquals(command, "start lte update")) {
+#if defined(LTE_REAL_OTA) && LTE_REAL_OTA
+    operation = Operation::InstallUpdate;
+#else
+    operation = Operation::SimulateUpdate;
+#endif
+  }
   else if (commandEquals(command, "start lte download")) operation = Operation::DownloadTest;
   else if (commandEquals(command, "lte update report")) operation = Operation::ReportDownload;
   else if (commandEquals(command, "lte modem test")) operation = Operation::ModemTest;
@@ -184,11 +190,12 @@ void LTEUpdateManager::run(Operation operation) {
       case Operation::ModemTest: error = diagnose(); break;
       case Operation::Sleep: error = power.setSleep(true, this); break;
       case Operation::Wake: error = power.wakeUp(this); break;
+      case Operation::InstallUpdate:
       case Operation::DownloadTest:
       case Operation::ReportDownload:
         transition(State::MODEM_BOOT, 0);
         error = power.wakeUp(this);
-        if (error == Error::None) error = operation==Operation::ReportDownload ? platform.reportDownload(*this) : platform.downloadUpdate(*this);
+        if (error == Error::None) error = operation==Operation::ReportDownload ? platform.reportDownload(*this) : operation==Operation::InstallUpdate ? platform.installUpdate(*this) : platform.downloadUpdate(*this);
         break;
       default: error = Error::BadConfig; break;
     }
@@ -197,12 +204,17 @@ void LTEUpdateManager::run(Operation operation) {
   if (error == Error::None && cancelled()) error = Error::Cancelled;
   // Cleanup intentionally ignores user cancel, but each AT request has a deadline.
   Error cleanup = Error::None;
-  if ((operation == Operation::ModemTest || operation == Operation::SimulateUpdate || operation == Operation::DownloadTest || operation == Operation::ReportDownload || error != Error::None) &&
+  if ((operation == Operation::ModemTest || operation == Operation::SimulateUpdate || operation == Operation::DownloadTest || operation == Operation::ReportDownload || operation == Operation::InstallUpdate || error != Error::None) &&
       config.sleepControl && power.isSleepRequested() != priorSleep) {
     cleanup = power.setSleep(priorSleep);
     if (cleanup != Error::None) platform.log("Sleep restore failed; S remains awake (fail safe)");
   }
   transport.end();
+  if(operation==Operation::InstallUpdate && error==Error::None && cleanup==Error::None){
+    // The lock makes cancellation and boot selection mutually exclusive.
+    Lock guard(platform);
+    error=status.cancelRequested ? Error::Cancelled : platform.activateUpdate(priorSleep);
+  }
   const bool finalSleep = power.isSleepRequested();
   {
     Lock guard(platform);

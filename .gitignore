@@ -13,3 +13,4 @@ __pycache__/
 .local/
 lib/LTEUpdate/src/LTEDeploymentConfig.h
 lib/LTEUpdate/src/TrustAnchor.h
+lib/LTEUpdate/src/TrustedKey.h

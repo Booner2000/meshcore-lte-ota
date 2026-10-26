@@ -133,12 +133,22 @@ public:
     // drop the original CLI's multi-write response on ESP32 HWCDC.
     if (logs) xQueueSend(logs, line, 0);
   }
-  Error httpJob(Cancellation& cancel,bool reportOnly) {
+  EspOtaSession* staged = nullptr;
+  bool rebootRequested = false;
+  Error httpJob(Cancellation& cancel,bool reportOnly, bool install=false) {
     char key[65], name[33];
     { Lock guard(*this); memcpy(key,publicKey,sizeof(key)); memcpy(name,stationName,sizeof(name)); }
     if (!key[0] || !name[0] || !uart || !manager) return Error::BadConfig;
     A7670Http http(*uart,*this,*manager,cancel,key,name);
-    return http.download(reportOnly);
+    if(install){delete staged;staged=new EspOtaSession();if(!staged)return Error::NotReady;}
+    Error e=http.download(reportOnly,install?staged:nullptr);
+    if(e!=Error::None && install){delete staged;staged=nullptr;}
+    return e;
+  }
+  Error installUpdate(Cancellation& cancel) override {return httpJob(cancel,false,true);}
+  Error activateUpdate(bool sleepAllowed) override {
+    if(!staged)return Error::NotReady;
+    Error e=staged->activate(sleepAllowed);rebootRequested=e==Error::None;delete staged;staged=nullptr;return e;
   }
   Error downloadUpdate(Cancellation& cancel) override { return httpJob(cancel,false); }
   Error reportDownload(Cancellation& cancel) override { return httpJob(cancel,true); }
@@ -159,6 +169,9 @@ struct Service {
   LTEUpdateManager manager;
   bool running = false;
   bool attempted = false;
+  std::atomic<bool> bootProbeReady{false};
+  bool bootProbeQueued=false;
+  bool reportChecked=false;
   Service() : manager(platform, uart, config) { platform.uart=&uart; platform.manager=&manager; config.taskStackBytes=16384; }
   static void task(void* context) {
     Service& self = *static_cast<Service*>(context);
@@ -166,12 +179,17 @@ struct Service {
     for (;;) {
       if (xQueueReceive(self.platform.jobs, &op, portMAX_DELAY) == pdTRUE) {
         self.manager.run(op);
+        if(self.bootProbeQueued){self.bootProbeReady=self.manager.snapshot().completed;self.bootProbeQueued=false;}
+        char stack[80];snprintf(stack,sizeof(stack),"Worker minimum free stack=%u",unsigned(uxTaskGetStackHighWaterMark(nullptr)));self.platform.log(stack);
+        delete self.platform.staged;self.platform.staged=nullptr;
+        if(self.platform.rebootRequested){self.platform.log("OTA activated; restarting after modem cleanup");vTaskDelay(pdMS_TO_TICKS(1000));esp_restart();}
       }
     }
   }
   bool begin() {
     if (attempted) return running;
     attempted = true;
+    otaBootBegin();
     platform.mutex = xSemaphoreCreateMutex();
     platform.jobs = xQueueCreate(1, sizeof(Operation));
     platform.logs = xQueueCreate(8, 176);
@@ -180,14 +198,28 @@ struct Service {
     running = xTaskCreatePinnedToCore(task, "LTEUpdate", config.taskStackBytes,
                                     this, 1, &platform.worker, 0) == pdPASS;
     if (!running) platform.log("Worker creation failed");
+    if(running && (otaPendingHealth() || otaRestoreSleep())){
+      bootProbeQueued=true;char reply[CliReplySize];
+      manager.handleCommand(otaRestoreSleep()?"lte modem sleep":"lte modem test",reply,sizeof(reply));
+    }
     return running;
   }
 };
 Service& service() { static Service instance; return instance; }
 }
 bool beginService() { return service().begin(); }
-bool serviceBusy() { return service().running && service().manager.snapshot().busy; }
-void pollService() { if (service().platform.logs) service().platform.flushLogs(); }
+bool serviceBusy() { return otaPendingHealth() || (service().running && service().manager.snapshot().busy); }
+void serviceHealthTick(){if(service().running && service().bootProbeReady)otaHealthTick();}
+void pollService() {
+  Service& self=service();
+  if(self.platform.logs)self.platform.flushLogs();
+  if(self.running && self.bootProbeReady && !otaPendingHealth() && !self.reportChecked && !self.manager.snapshot().busy){
+    self.reportChecked=true;char id[25]={},hash[65]={};
+    if(otaInstalledReport(id,hash)){
+      char reply[CliReplySize];self.manager.handleCommand("lte update report",reply,sizeof(reply));
+    }
+  }
+}
 void setStationIdentity(const uint8_t* key, const char* name, uint32_t utc) {
   Service& self=service();
   if(!self.running || !key || !name) return;
@@ -202,7 +234,12 @@ void setStationIdentity(const uint8_t* key, const char* name, uint32_t utc) {
 }
 bool serviceCommand(const char* command, char* reply, size_t capacity) {
   Service& self = service();
+  if(commandEquals(command,"lte ota status")){otaStatus(reply,capacity);return true;}
 #if defined(LTE_HARDWARE_DIAGNOSTICS) && LTE_HARDWARE_DIAGNOSTICS
+  if(commandEquals(command,"lte ota rollback test")){
+    if(serviceBusy()){snprintf(reply,capacity,"ERR BUSY");return true;}
+    Error e=otaRollbackProbe();snprintf(reply,capacity,"%s",e==Error::None?"OK rollback probe: restart, withhold health, automatic return within 65 seconds":errorName(e));return true;
+  }
   if (commandEquals(command, "lte modem io") && self.running) {
     const int level = self.config.sleepControl ? gpio_get_level(static_cast<gpio_num_t>(self.config.sleepPin)) : -1;
     snprintf(reply, capacity, "uart=%d tx=%d rx=%d baud=%lu S=%d level=%d txbytes=%lu rxbytes=%lu faults=%lu",

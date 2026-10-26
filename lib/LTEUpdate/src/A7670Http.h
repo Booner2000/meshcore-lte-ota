@@ -1,10 +1,13 @@
 #pragma once
 #if defined(WITH_LTE_OTA) && WITH_LTE_OTA
 #include "LTEUpdateManager.h"
+#include "EspOtaSession.h"
 
 namespace lte {
 // Real LTE/HTTPS download test. Streams through a 1-KiB buffer, no flash writer.
 class A7670Http {
+  EspOtaSession* installer = nullptr;
+  bool installedReport = false;
   ByteUart& uart;
   Platform& platform;
   LTEUpdateManager& manager;
@@ -27,7 +30,7 @@ class A7670Http {
 public:
   A7670Http(ByteUart& u, Platform& p, LTEUpdateManager& m, Cancellation& c,
             const char* publicKey, const char* name);
-  Error download(bool reportOnly = false);
+  Error download(bool reportOnly = false, EspOtaSession* ota = nullptr);
 };
 }
 #endif

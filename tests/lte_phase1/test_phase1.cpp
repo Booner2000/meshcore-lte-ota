@@ -402,4 +402,5 @@ int main() {
   testCancelManualSleepBoundary();
   printf("PASS: %u checks; 13 test groups; no hardware or flash access\n", checks);
   printf("sizeof(Status)=%zu; sizeof(LTEUpdateManager)=%zu\n", sizeof(Status), sizeof(LTEUpdateManager));
+  return 0;
 }

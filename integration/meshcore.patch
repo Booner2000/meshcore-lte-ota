@@ -1,5 +1,5 @@
 diff --git a/examples/simple_repeater/main.cpp b/examples/simple_repeater/main.cpp
-index d475b13..0b962b0 100644
+index d475b13..7e31e95 100644
 --- a/examples/simple_repeater/main.cpp
 +++ b/examples/simple_repeater/main.cpp
 @@ -123,6 +123,9 @@ void setup() {
@@ -12,6 +12,16 @@ index d475b13..0b962b0 100644
    // Handle Serial CLI
    int len = strlen(command);
    // `command` must stay NUL-terminated within its bounds. If it ever isn't,
+@@ -201,6 +204,9 @@ void loop() {
+   ui_task.loop();
+ #endif
+   rtc_clock.tick();
++#if defined(WITH_LTE_OTA) && WITH_LTE_OTA
++  lte::serviceHealthTick();
++#endif
+ 
+ #ifdef HAS_EXTERNAL_WATCHDOG
+   external_watchdog.loop();
 diff --git a/variants/xiao_s3_wio/XiaoS3WIOBoard.h b/variants/xiao_s3_wio/XiaoS3WIOBoard.h
 index 7ae06a3..d578182 100644
 --- a/variants/xiao_s3_wio/XiaoS3WIOBoard.h

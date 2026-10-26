@@ -26,9 +26,24 @@ subprocess.run(command, cwd=root, check=True)
 subprocess.run([str(exe)], cwd=root, check=True)
 
 # Phase-1 isolation boundary: no direct flash/boot/restart API in the new module.
-for source in module.glob('*'):
+for source in [module / name for name in sources]:
     text = source.read_text(encoding='utf-8')
     for forbidden in ('esp_ota_begin(', 'esp_ota_write(', 'esp_ota_set_boot_partition(',
                       'esp_partition_erase_range(', 'esp_restart(', 'Update.begin(', 'SPIFFS.format('):
         assert forbidden not in text, f'Forbidden Phase-1 operation: {source}: {forbidden}'
-print('PASS: Phase-1 module contains no flash/boot/reboot operations')
+print('PASS: portable manager has no direct flash/boot/reboot operations')
+install_exe = build / ('test_install.exe' if os.name == 'nt' else 'test_install')
+install_command = [args.compiler] + (['c++'] if args.zig else []) + [
+    '-std=c++17', '-Wall', '-Wextra', '-Werror', '-pthread', '-DLTE_REAL_OTA=1', '-I', str(module),
+    str(root / 'tests/lte_install/test_install.cpp'),
+    *[str(module / source) for source in sources], '-o', str(install_exe)]
+subprocess.run(install_command, cwd=root, check=True)
+subprocess.run([str(install_exe)], cwd=root, check=True)
+
+http_exe = build / ('test_http.exe' if os.name == 'nt' else 'test_http')
+http_command = [args.compiler] + (['c++'] if args.zig else []) + [
+    '-std=c++17', '-Wall', '-Wextra', '-Werror', '-pthread', '-I', str(module),
+    str(root / 'tests/lte_http/test_http.cpp'),
+    *[str(module / source) for source in sources], str(module/'A7670BodyReader.cpp'), '-o', str(http_exe)]
+subprocess.run(http_command, cwd=root, check=True)
+subprocess.run([str(http_exe)], cwd=root, check=True)

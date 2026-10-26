@@ -13,7 +13,7 @@ const char* errorName(Error value) {
   static const char* const names[] = {"NONE", "NOT_READY", "BAD_CONFIG", "BUSY",
     "QUEUE_FULL", "UART_INIT", "UART_IO", "UART_OVERFLOW", "RESPONSE_OVERFLOW",
     "AT_ERROR", "AT_TIMEOUT", "BAD_RESPONSE", "SLEEP_DISABLED", "SLEEP_RESTORE",
-    "CANCELLED", "NOT_IMPLEMENTED", "HTTP_BLOCKED", "HTTP_ERROR", "HASH_MISMATCH", "TLS_CONFIG"};
+    "CANCELLED", "NOT_IMPLEMENTED", "HTTP_BLOCKED", "HTTP_ERROR", "HASH_MISMATCH", "TLS_CONFIG", "SIGNATURE_INVALID", "FLASH_ERROR", "DATA_BUDGET"};
   const unsigned i = static_cast<unsigned>(value);
   return i < sizeof(names)/sizeof(names[0]) ? names[i] : "UNKNOWN";
 }

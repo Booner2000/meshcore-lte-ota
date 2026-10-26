@@ -7,11 +7,11 @@ enum class State : uint8_t {
   IDLE, PREFLIGHT, POWER_ON, MODEM_BOOT, SIM_READY, REGISTER, DATA_READY,
   DOWNLOADING, VERIFYING, READY_TO_COMMIT, FAILED, CANCELLED
 };
-enum class Operation : uint8_t { None, SimulateUpdate, ModemTest, Sleep, Wake, DownloadTest, ReportDownload };
+enum class Operation : uint8_t { None, SimulateUpdate, ModemTest, Sleep, Wake, DownloadTest, ReportDownload, InstallUpdate };
 enum class Error : uint8_t {
   None, NotReady, BadConfig, Busy, QueueFull, UartInit, UartIo,
   UartOverflow, ResponseOverflow, AtError, AtTimeout, BadResponse,
-  SleepDisabled, SleepRestore, Cancelled, NotImplemented, HttpBlocked, HttpError, HashMismatch, TlsConfig
+  SleepDisabled, SleepRestore, Cancelled, NotImplemented, HttpBlocked, HttpError, HashMismatch, TlsConfig, SignatureInvalid, FlashError, DataBudget
 };
 enum class AtOutcome : uint8_t {
   NotRun, Ok, Error, Timeout, Cancelled, Overflow, IoError, BadResponse, UartOverflow

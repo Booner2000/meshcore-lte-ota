@@ -16,6 +16,8 @@ public:
   virtual void output(int pin, bool high) = 0;
   virtual void log(const char* message) = 0;
   virtual Error downloadUpdate(Cancellation&) { return Error::NotImplemented; }
+  virtual Error installUpdate(Cancellation&) { return Error::NotImplemented; }
+  virtual Error activateUpdate(bool) { return Error::NotImplemented; }
   virtual Error reportDownload(Cancellation&) { return Error::NotImplemented; }
   virtual uint32_t currentUtc() { return 0; }
 };
