@@ -8,6 +8,10 @@ struct InstallPlatform : FakePlatform {
   Error installUpdate(Cancellation&) override {++downloads;if(duringDownload)duringDownload();return result;}
   Error activateUpdate(bool) override {++activations;return activation;}
 };
+struct PreferredPlatform : InstallPlatform {
+  Error preferred=Error::NotImplemented;unsigned attempts=0;
+  Error preferredUpdate(Operation,Cancellation&) override {++attempts;return preferred;}
+};
 int main(){
   for(Error failure : {Error::None,Error::HashMismatch,Error::SignatureInvalid,Error::Cancelled,Error::FlashError,Error::DataBudget}){
     InstallPlatform p;FakeUart uart(p);auto config=sleepConfig();LTEUpdateManager manager(p,uart,config);
@@ -48,5 +52,19 @@ int main(){
    m.handleCommand("start lte update",reply,sizeof(reply));m.run(p.queue.front());
    CHECK(cancelled && p.downloads==0 && p.activations==0);CHECK(uart.modemBaud==115200);
    CHECK(m.snapshot().error==Error::Cancelled && m.snapshot().cleanupError==Error::None);}
+  for(Error result:{Error::None,Error::NotImplemented,Error::NetworkUnavailable,Error::SignatureInvalid,Error::HashMismatch,Error::TlsConfig,Error::HttpBlocked,Error::Cancelled,Error::BadConfig}){
+    PreferredPlatform p;FakeUart uart(p);auto c=sleepConfig();LTEUpdateManager m(p,uart,c);m.begin();char reply[151];p.preferred=result;
+    CHECK(m.handleCommand("start update ",reply,sizeof(reply)));CHECK(m.snapshot().route==UpdateRoute::Auto);m.run(p.queue.front());
+    bool fallback=result==Error::NotImplemented || result==Error::NetworkUnavailable;
+    CHECK(p.attempts==1);CHECK(p.downloads==(fallback?1u:0u));
+    CHECK(p.activations==((fallback||result==Error::None)?1u:0u));
+    if(!fallback)CHECK(uart.commands.empty());
+    CHECK(m.snapshot().error==(fallback?Error::None:result));
+  }
+  {PreferredPlatform p;FakeUart uart(p);auto c=sleepConfig();LTEUpdateManager m(p,uart,c);m.begin();char reply[151];p.preferred=Error::NetworkUnavailable;
+   CHECK(m.handleCommand("start wifi update",reply,sizeof(reply)));m.run(p.queue.front());
+   CHECK(p.attempts==1 && p.downloads==0 && p.activations==0 && uart.commands.empty());CHECK(m.snapshot().error==Error::NetworkUnavailable);}
+  {PreferredPlatform p;FakeUart uart(p);auto c=sleepConfig();LTEUpdateManager m(p,uart,c);m.begin();char reply[151];p.preferred=Error::None;
+   CHECK(m.handleCommand("start lte update",reply,sizeof(reply)));m.run(p.queue.front());CHECK(p.attempts==0 && p.downloads==1 && p.activations==1);}
   printf("PASS: %u install transaction checks; activation blocked on cancellation, validation error or cleanup failure\n",checks);
 }

@@ -16,19 +16,20 @@ namespace lte {
 const char OtaCapability[] = "MESHCORE_LTE_OTA:xiao-s3-wio-b2b-lte-v1:2";
 // Retained through an actual reference in verification, not a dead string.
 const char UartRecoveryCapability[] = "MESHCORE_LTE_UART_RECOVERY:v1";
+const char WifiOtaCapability[] = "MESHCORE_WIFI_OTA:v1";
 namespace {
-bool recoveryImage(const esp_partition_t* partition) {
+bool imageMarker(const esp_partition_t* partition,const char* marker) {
   if(!partition)return false;
   esp_partition_pos_t pos={partition->address,partition->size};
   esp_image_metadata_t metadata={};
   if(esp_image_verify(ESP_IMAGE_VERIFY_SILENT,&pos,&metadata)!=ESP_OK)return false;
-  const size_t markerSize=sizeof(UartRecoveryCapability)-1;
+  const size_t markerSize=strlen(marker);
   uint8_t buffer[1024+sizeof(UartRecoveryCapability)]={};size_t tail=0;
   for(uint32_t offset=0;offset<metadata.image_len;){
     size_t count=std::min(size_t(metadata.image_len-offset),size_t(1024));
     if(esp_partition_read(partition,offset,buffer+tail,count)!=ESP_OK)return false;
     for(size_t i=0;i+markerSize<=tail+count;++i)
-      if(!memcmp(buffer+i,UartRecoveryCapability,markerSize))return true;
+      if(!memcmp(buffer+i,marker,markerSize))return true;
     const size_t total=tail+count;tail=std::min(total,markerSize-1);
     memmove(buffer,buffer+total-tail,tail);offset+=count;delay(1);
   }
@@ -48,7 +49,7 @@ bool otaFastUartSafe() {
   const esp_partition_t* other=esp_ota_get_next_update_partition(nullptr);
   esp_ota_img_states_t state;
   return other && esp_ota_get_state_partition(other,&state)==ESP_OK &&
-    state==ESP_OTA_IMG_VALID && recoveryImage(other);
+    state==ESP_OTA_IMG_VALID && imageMarker(other,UartRecoveryCapability);
 }
 uint32_t otaReleaseFloor() {
   Preferences p;
@@ -84,7 +85,7 @@ Error EspOtaSession::finish() {
   char actual[65];for(unsigned i=0;i<32;++i)snprintf(actual+i*2,3,"%02x",digest[i]);
   if(strcmp(actual,hash))return Error::HashMismatch;
   // A correctly signed old LTE build must not remove baud recovery.
-  if(!recoveryImage(partition))return Error::BadConfig;
+  if(!imageMarker(partition,UartRecoveryCapability) || !imageMarker(partition,WifiOtaCapability))return Error::BadConfig;
   finished=true;return Error::None;
 }
 Error EspOtaSession::activate(bool sleepAllowed) {

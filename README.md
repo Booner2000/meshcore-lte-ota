@@ -1,10 +1,10 @@
-# MeshCore LTE OTA
+# MeshCore WLAN / LTE OTA
 
-Experimental LTE update extension for the Seeed XIAO ESP32-S3 with Wio-SX1262 and SIMCom A7670E. This repository contains only the extension, portable tests and a small integration patch. MeshCore is fetched separately at the commit in `upstream.json`.
+Update extension for the Seeed XIAO ESP32-S3 with Wio-SX1262 and SIMCom A7670E. WLAN is preferred, with LTE as fallback; both use one signed update pipeline. This repository contains only the extension, portable tests and a small integration patch. MeshCore is fetched separately at the commit in `upstream.json`.
 
 ## Current status
 
-**Bench-qualified for the tested externally powered setup.** Signed LTE installation, flash readback, boot health confirmation, automatic installation reporting and an intentionally triggered rollback passed on hardware. See the [qualification report](docs/hardware-tests.md) for results and limits. Battery operation and supply switching are not qualified. The diagnostic build maps `start lte update` to real installation when `LTE_REAL_OTA=1`; the base environment retains simulation.
+**Bench-qualified for the tested externally powered setup.** Signed WLAN installation, WLAN-first routing, bounded LTE fallback, flash readback, boot health confirmation, installation reporting and rollback passed on hardware. See the [WLAN qualification](docs/wifi-updates.md#hardware-qualification-2026-10-27) and [earlier LTE report](docs/hardware-tests.md) for results and limits. Battery operation and supply switching are not qualified. Installation commands perform real OTA when `LTE_REAL_OTA=1`; the base environment retains simulation.
 
 The operating web service and deployment configuration are not included in this initial firmware-only repository. The download client expects the manifest, firmware range and report endpoints under `/meshcoreupdate/api/v1/`.
 
@@ -44,6 +44,12 @@ Local configuration files, firmware binaries and build directories are ignored. 
 Radio administration continues through MeshCore's existing admin authorization. Device requests use the public MeshCore key and name, without a device token. Such identity is spoofable and must not be treated as cryptographic device authentication.
 
 See [the signed update protocol](docs/update-protocol.md) for the server contract and boot safety rules.
+
+Use **`start update`** for automatic WLAN-first installation. The existing
+`start lte update` explicitly forces LTE. See [WLAN provisioning and shared
+administration](docs/wifi-updates.md) for commands, private NVS credentials and
+configuration recovery. Neither WLAN passwords nor configuration-service device
+credentials are built into the app image.
 
 See [transfer measurements](docs/transfer-performance.md) for tested baud rates, data overhead, compression potential and the reset-recovery prerequisite for higher production speeds.
 

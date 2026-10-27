@@ -8,10 +8,11 @@ enum class State : uint8_t {
   DOWNLOADING, VERIFYING, READY_TO_COMMIT, FAILED, CANCELLED
 };
 enum class Operation : uint8_t { None, SimulateUpdate, ModemTest, Sleep, Wake, DownloadTest, ReportDownload, InstallUpdate };
+enum class UpdateRoute : uint8_t { Auto, Wifi, Lte };
 enum class Error : uint8_t {
   None, NotReady, BadConfig, Busy, QueueFull, UartInit, UartIo,
   UartOverflow, ResponseOverflow, AtError, AtTimeout, BadResponse,
-  SleepDisabled, SleepRestore, Cancelled, NotImplemented, HttpBlocked, HttpError, HashMismatch, TlsConfig, SignatureInvalid, FlashError, DataBudget
+  SleepDisabled, SleepRestore, Cancelled, NotImplemented, HttpBlocked, HttpError, HashMismatch, TlsConfig, SignatureInvalid, FlashError, DataBudget, NetworkUnavailable
 };
 enum class AtOutcome : uint8_t {
   NotRun, Ok, Error, Timeout, Cancelled, Overflow, IoError, BadResponse, UartOverflow
@@ -47,6 +48,8 @@ struct Status {
   uint8_t progress = 0;
   State state = State::IDLE;
   Operation operation = Operation::None;
+  UpdateRoute route = UpdateRoute::Lte;
+  UpdateRoute activeRoute = UpdateRoute::Auto;
   Error error = Error::None;
   Error cleanupError = Error::None;
   ModemStatus modem;

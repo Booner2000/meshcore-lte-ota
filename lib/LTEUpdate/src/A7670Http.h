@@ -3,13 +3,13 @@
 #include "LTEUpdateManager.h"
 #include "EspOtaSession.h"
 #include "UpdateEndpoint.h"
+#include "UpdateSession.h"
 
 namespace lte {
+class WifiConfig;
 // Real LTE/HTTPS download test. Streams through a 1-KiB buffer, no flash writer.
-class A7670Http {
+class A7670Http : public UpdateHttp {
   UpdateEndpoint endpoint;
-  EspOtaSession* installer = nullptr;
-  bool installedReport = false;
   ByteUart& uart;
   Platform& platform;
   LTEUpdateManager& manager;
@@ -17,22 +17,21 @@ class A7670Http {
   char identity[192] = {};
   char line[320] = {};
   int actionStatus = -1;
-  uint32_t actionLength = 0;
   bool initialized = false;
   bool primaryApn = false, packetAttached = false, networkRegistered = false;
-  Error failure = Error::None;
   bool receiveLine(uint32_t timeout, bool cancellable = true);
-  bool command(const char* text, uint32_t timeout = 5000, const char* find = nullptr, bool* found = nullptr);
+  bool command(const char* text, uint32_t timeout = 5000, const char* find = nullptr, bool* found = nullptr, bool sensitive = false);
   bool certificate();
   bool get(const char* path, int rangeStart = -1, int rangeEnd = -1);
   bool readBody(uint32_t offset, uint8_t* data, size_t count);
-  bool report(const char* firmware, const char* hash);
-  bool reportWithRetries(const char* firmware, const char* hash);
-  Error run(bool reportOnly);
+  bool post(const char* payload) override;
+  bool prepare() override;
+  void close() override;
 public:
   A7670Http(ByteUart& u, Platform& p, LTEUpdateManager& m, Cancellation& c,
             const char* publicKey, const char* name, const UpdateEndpoint& server);
-  Error download(bool reportOnly = false, EspOtaSession* ota = nullptr);
+  Error refreshWifiConfig(WifiConfig& config);
+
 };
 }
 #endif

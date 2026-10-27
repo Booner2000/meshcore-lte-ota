@@ -21,6 +21,7 @@ public:
   bool handleCommand(const char* command, char* reply, size_t capacity);
   Status snapshot();
   void reportProgress(State state, uint8_t progress) { transition(state, progress); }
+  void reportTransport(UpdateRoute route) {Lock guard(platform);status.activeRoute=route;}
   bool cancelled() override;
   void sleepPermissionChanged(bool allowed) override;
   // Only the single worker calls this, never the MeshCore loop/CLI.

@@ -1,4 +1,5 @@
 #include "LTEUpdateManager.h"
+#include "WifiFailurePolicy.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -420,13 +421,18 @@ static void testBaudRecovery() {
    CHECK(power.wakeUp()==Error::AtTimeout);CHECK(p.clock<17000);CHECK(!power.isSleepRequested());}
 }
 int main() {
+  CHECK(wifiConnectFailure(0)==Error::NetworkUnavailable);
+  CHECK(wifiConnectFailure(-1)==Error::NetworkUnavailable);
+  CHECK(wifiConnectFailure(-9984)==Error::TlsConfig); // X509 verification failure
+  CHECK(wifiConnectFailure(-8576)==Error::TlsConfig); // Invalid CA/PEM input
+  CHECK(wifiConnectFailure(-12345)==Error::TlsConfig); // Unknown TLS errors fail closed
   testCommandsAndSimulation(); testCancelAtEveryStage(); testQueueAndConfigFailures();
   testParser(); testDiagnosticAndRedaction(); testSleepRoundTrip();
   testSleepFailureAndRestore(); testFailureClassificationAndBounds(); testNoOtaImplementation();
   testCliWhileWorkerWaits(); testPowerAndTransactionExclusion(); testExtendedDiagnosticError();
   testCancelManualSleepBoundary();
   testBaudRecovery();
-  printf("PASS: %u checks; 14 test groups; no hardware or flash access\n", checks);
+  printf("PASS: %u checks; 15 test groups; no hardware or flash access\n", checks);
   printf("sizeof(Status)=%zu; sizeof(LTEUpdateManager)=%zu\n", sizeof(Status), sizeof(LTEUpdateManager));
   return 0;
 }

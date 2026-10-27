@@ -5,6 +5,8 @@
 namespace lte {
 // ESP32 adapter. The portable manager has no dependency on MeshCore classes.
 bool beginService();
+bool pollProvisioningSerial();
+void startProvisioningSerial();
 bool serviceCommand(const char* command, char* reply, size_t capacity);
 bool serviceBusy();
 void pollService();

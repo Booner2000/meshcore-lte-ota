@@ -1,6 +1,7 @@
 #include "LTEUpdateService.h"
 #include "LTECommand.h"
 #include "A7670Http.h"
+#include "WifiHttp.h"
 #if defined(WITH_LTE_OTA) && WITH_LTE_OTA
 #include <Arduino.h>
 #include <Preferences.h>
@@ -144,15 +145,49 @@ public:
   }
   EspOtaSession* staged = nullptr;
   bool rebootRequested = false;
+  Error sessionJob(UpdateHttp& http,Cancellation& cancel,bool reportOnly,bool install,const char* key){
+    const bool reportStaged=install && staged && staged->ready();
+    if(install && !reportStaged){delete staged;staged=new EspOtaSession();if(!staged)return Error::NotReady;}
+    UpdateSession session(http,*this,*manager,cancel,key);
+    Error error=session.download(reportOnly||reportStaged,install&&!reportStaged?staged:nullptr);
+    // A verified image awaiting only a report can be completed over LTE without
+    // spending SIM volume downloading the identical image a second time.
+    if(error!=Error::None && install && !(error==Error::NetworkUnavailable && staged && staged->ready())){delete staged;staged=nullptr;}
+    return error;
+  }
+  Error preferredUpdate(Operation op,Cancellation& cancel) override {
+    manager->reportTransport(UpdateRoute::Wifi);
+    WifiConfig config;config.load();WifiConnection connection(*this,cancel);
+    manager->reportProgress(State::REGISTER,0);
+    Error error=connection.connect(config);if(error!=Error::None)return error;
+    connection.sync(config);
+    char key[65],name[33];UpdateEndpoint server;
+    {Lock guard(*this);memcpy(key,publicKey,sizeof(key));memcpy(name,stationName,sizeof(name));server=endpoint;}
+    if(!key[0] || !name[0])return Error::BadConfig;
+    log("Update transport: WiFi; modem not used for firmware");
+    WifiHttp http(*this,cancel,server,key,name);
+    return sessionJob(http,cancel,op==Operation::ReportDownload,op==Operation::InstallUpdate,key);
+  }
   Error httpJob(Cancellation& cancel,bool reportOnly, bool install=false) {
     char key[65], name[33];UpdateEndpoint server;
     { Lock guard(*this); memcpy(key,publicKey,sizeof(key)); memcpy(name,stationName,sizeof(name));server=endpoint; }
     if (!key[0] || !name[0] || !uart || !manager) return Error::BadConfig;
     A7670Http http(*uart,*this,*manager,cancel,key,name,server);
-    if(install){delete staged;staged=new EspOtaSession();if(!staged)return Error::NotReady;}
-    Error e=http.download(reportOnly,install?staged:nullptr);
-    if(e!=Error::None && install){delete staged;staged=nullptr;}
-    return e;
+    if(!reportOnly && manager->snapshot().route==UpdateRoute::Auto && !(staged && staged->ready())){
+      WifiConfig config;if(config.load()){
+        uint32_t previous=config.version;
+        Error refreshed=http.refreshWifiConfig(config);
+        if(cancel.cancelled())return Error::Cancelled;
+        if(refreshed==Error::None && config.version!=previous){
+          log("Shared WLAN settings refreshed over LTE; retrying WiFi once");
+          Error retry=preferredUpdate(install?Operation::InstallUpdate:Operation::DownloadTest,cancel);
+          if(retry!=Error::NotImplemented && retry!=Error::NetworkUnavailable)return retry;
+        }
+      }
+    }
+    manager->reportTransport(UpdateRoute::Lte);
+    log("Update transport: LTE");
+    return sessionJob(http,cancel,reportOnly,install,key);
   }
   Error installUpdate(Cancellation& cancel) override {return httpJob(cancel,false,true);}
   Error activateUpdate(bool sleepAllowed) override {
@@ -225,12 +260,14 @@ struct Service {
 Service& service() { static Service instance; return instance; }
 }
 bool beginService() { return service().begin(); }
-bool serviceBusy() { return otaPendingHealth() || (service().running && service().manager.snapshot().busy); }
+bool pollProvisioningSerial(){return pollWifiProvisioning(serviceBusy());}
+void startProvisioningSerial(){startWifiProvisioning(serviceBusy());}
+bool serviceBusy() { return wifiProvisioningActive() || otaPendingHealth() || (service().running && service().manager.snapshot().busy); }
 void serviceHealthTick(){if(service().running && service().bootProbeReady)otaHealthTick();}
 void pollService() {
   Service& self=service();
   if(self.platform.logs)self.platform.flushLogs();
-  if(self.running && self.bootProbeReady && !otaPendingHealth() && !self.reportChecked && !self.manager.snapshot().busy){
+  if(self.running && self.bootProbeReady && !otaPendingHealth() && !wifiProvisioningActive() && !self.reportChecked && !self.manager.snapshot().busy){
     self.reportChecked=true;char id[25]={},hash[65]={};
     if(otaInstalledReport(id,hash)){
       char reply[CliReplySize];self.manager.handleCommand("lte update report",reply,sizeof(reply));
@@ -251,6 +288,11 @@ void setStationIdentity(const uint8_t* key, const char* name, uint32_t utc) {
 }
 bool serviceCommand(const char* command, char* reply, size_t capacity) {
   Service& self = service();
+  if(wifiProvisioningActive() && (!strncmp(command,"lte ",4) || !strncmp(command,"wifi ",5) || !strncmp(command,"start ",6) || !strncmp(command,"update ",7))){snprintf(reply,capacity,"BUSY USB provisioning");return true;}
+  if(commandEquals(command,"wifi update status")){
+    if(serviceBusy()){snprintf(reply,capacity,"BUSY: configuration unchanged");return true;}
+    WifiConfig config;const bool ready=config.load();snprintf(reply,capacity,"WIFI configured=%u networks=%u version=%lu active=%u",ready,config.count,static_cast<unsigned long>(config.version),WiFi.isConnected());return true;
+  }
   if(commandEquals(command,"lte ota status")){otaStatus(reply,capacity);return true;}
 #if defined(LTE_HARDWARE_DIAGNOSTICS) && LTE_HARDWARE_DIAGNOSTICS
   if(commandEquals(command,"lte ota rollback test")){

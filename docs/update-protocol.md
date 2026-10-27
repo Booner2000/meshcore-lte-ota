@@ -52,3 +52,7 @@ updating MeshCore. A signed older LTE image that lacks recovery is rejected.
 The publishing server should enforce both LTE and UART recovery markers for new
 uploads; existing historical artifacts may remain in its audit history.
 See [the staged migration](uart-recovery.md) before enabling higher UART rates.
+
+WLAN-first builds also require `MESHCORE_WIFI_OTA:v1` in the verified image.
+Both transports execute the same `UpdateSession` validation and installation
+pipeline. See [WLAN updates](wifi-updates.md) for routing and configuration.

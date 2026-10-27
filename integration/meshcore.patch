@@ -1,8 +1,8 @@
 diff --git a/examples/simple_repeater/main.cpp b/examples/simple_repeater/main.cpp
-index d475b13..7e31e95 100644
+index d475b13..2096df9 100644
 --- a/examples/simple_repeater/main.cpp
 +++ b/examples/simple_repeater/main.cpp
-@@ -123,6 +123,9 @@ void setup() {
+@@ -123,7 +123,13 @@ void setup() {
  }
  
  void loop() {
@@ -10,9 +10,35 @@ index d475b13..7e31e95 100644
 +  lte::setStationIdentity(the_mesh.self_id.pub_key, the_mesh.getNodeName(), rtc_clock.getCurrentTime());
 +#endif
    // Handle Serial CLI
++#if defined(WITH_LTE_OTA) && WITH_LTE_OTA
++  if (command[0] || !lte::pollProvisioningSerial()) {
++#endif
    int len = strlen(command);
    // `command` must stay NUL-terminated within its bounds. If it ever isn't,
-@@ -201,6 +204,9 @@ void loop() {
+   // strlen() above can return >= sizeof(command) and the loop below would then
+@@ -134,6 +140,11 @@ void loop() {
+   }
+   while (Serial.available() && len < sizeof(command)-1) {
+     char c = Serial.read();
++#if defined(WITH_LTE_OTA) && WITH_LTE_OTA
++    // Catch a reserved prefix that arrived after the earlier USB peek, before
++    // either echoing it or adding credential bytes to the ordinary CLI buffer.
++    if (len == 0 && c == '!') { lte::startProvisioningSerial(); break; }
++#endif
+     if (c != '\n') {
+       command[len++] = c;
+       command[len] = 0;
+@@ -165,6 +176,9 @@ void loop() {
+     command[0] = 0;  // reset command buffer
+   }
+ 
++#if defined(WITH_LTE_OTA) && WITH_LTE_OTA
++  }
++#endif
+   board.loop();   // let the board feed its watchdog, run periodic housekeeping
+ 
+ #ifdef ETHERNET_ENABLED
+@@ -201,6 +215,9 @@ void loop() {
    ui_task.loop();
  #endif
    rtc_clock.tick();

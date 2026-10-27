@@ -15,6 +15,7 @@ public:
   Error write(uint32_t offset, const uint8_t* data, size_t count);
   Error finish();
   Error activate(bool sleepAllowed);
+  bool ready() const { return finished; }
 };
 void otaBootBegin();
 void otaHealthTick();

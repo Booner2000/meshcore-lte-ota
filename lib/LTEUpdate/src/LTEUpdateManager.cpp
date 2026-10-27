@@ -21,7 +21,9 @@ Status LTEUpdateManager::snapshot() { Lock guard(platform); return status; }
 bool LTEUpdateManager::cancelled() { Lock guard(platform); return status.cancelRequested; }
 bool LTEUpdateManager::handleCommand(const char* command, char* reply, size_t capacity) {
   Operation operation = Operation::None;
-  if (commandEquals(command, "start lte update")) {
+  UpdateRoute route=UpdateRoute::Lte;
+  if (commandEquals(command,"start update") || commandEquals(command,"start wifi update") || commandEquals(command, "start lte update")) {
+    route=commandEquals(command,"start update")?UpdateRoute::Auto:commandEquals(command,"start wifi update")?UpdateRoute::Wifi:UpdateRoute::Lte;
 #if defined(LTE_REAL_OTA) && LTE_REAL_OTA
     operation = Operation::InstallUpdate;
 #else
@@ -29,15 +31,16 @@ bool LTEUpdateManager::handleCommand(const char* command, char* reply, size_t ca
 #endif
   }
   else if (commandEquals(command, "start lte download")) operation = Operation::DownloadTest;
-  else if (commandEquals(command, "lte update report")) operation = Operation::ReportDownload;
+  else if(commandEquals(command,"start download") || commandEquals(command,"start wifi download")) {operation=Operation::DownloadTest;route=commandEquals(command,"start download")?UpdateRoute::Auto:UpdateRoute::Wifi;}
+  else if (commandEquals(command, "lte update report")) {operation = Operation::ReportDownload;route=UpdateRoute::Auto;}
   else if (commandEquals(command, "lte modem test")) operation = Operation::ModemTest;
   else if (commandEquals(command, "lte modem sleep")) operation = Operation::Sleep;
   else if (commandEquals(command, "lte modem wake")) operation = Operation::Wake;
-  else if (commandEquals(command, "lte update status")) {
+  else if (commandEquals(command, "lte update status") || commandEquals(command,"update status")) {
     const Status s = snapshot();
-    snprintf(reply, capacity, "%s id=%lu busy=%u %u%% sim=%u done=%u err=%s cleanup=%s",
+    snprintf(reply, capacity, "%s id=%lu busy=%u %u%% sim=%u done=%u err=%s cleanup=%s via=%s",
       stateName(s.state), static_cast<unsigned long>(s.jobId), s.busy, s.progress,
-      s.simulated, s.completed, errorName(s.error), errorName(s.cleanupError));
+      s.simulated, s.completed, errorName(s.error), errorName(s.cleanupError),s.activeRoute==UpdateRoute::Wifi?"wifi":s.activeRoute==UpdateRoute::Lte?"lte":"-");
     return true;
   } else if (commandEquals(command, "lte modem status")) {
     const Status s = snapshot();
@@ -48,7 +51,7 @@ bool LTEUpdateManager::handleCommand(const char* command, char* reply, size_t ca
       s.modem.signal, !s.sleepEnabled ? "off" : s.sleepRequested ? "allowed" : "awake",
       errorName(s.error), s.cleanupError != Error::None ? "/RESTORE" : "");
     return true;
-  } else if (commandEquals(command, "lte update cancel")) {
+  } else if (commandEquals(command, "lte update cancel") || commandEquals(command,"update cancel")) {
     Lock guard(platform);
     if (status.busy) {
       status.cancelRequested = true;
@@ -68,6 +71,8 @@ bool LTEUpdateManager::handleCommand(const char* command, char* reply, size_t ca
     status.busy = true;
     status.cancelRequested = false;
     status.operation = operation;
+    status.route = route;
+    status.activeRoute = UpdateRoute::Auto;
     status.state = State::PREFLIGHT;
     status.progress = 0;
     status.error = Error::None;
@@ -185,6 +190,7 @@ void LTEUpdateManager::run(Operation operation) {
   platform.log(operation == Operation::SimulateUpdate ? "Update job accepted (simulation)" : "Modem job accepted");
   Error error = cancelled() ? Error::Cancelled : Error::None;
   bool fastAttempt = false;
+  const UpdateRoute route=snapshot().route;
   if (error == Error::None) {
     switch (operation) {
       case Operation::SimulateUpdate: error = simulate(); break;
@@ -194,7 +200,15 @@ void LTEUpdateManager::run(Operation operation) {
       case Operation::InstallUpdate:
       case Operation::DownloadTest:
       case Operation::ReportDownload:
+        if(route!=UpdateRoute::Lte){
+          error=platform.preferredUpdate(operation,*this);
+          if(error!=Error::NotImplemented && error!=Error::NetworkUnavailable)break;
+          if(route==UpdateRoute::Wifi){if(error==Error::NotImplemented)error=Error::NetworkUnavailable;break;}
+          if(cancelled()){error=Error::Cancelled;break;}
+          platform.log("WiFi unavailable; falling back once to LTE");
+        }
         transition(State::MODEM_BOOT, 0);
+        reportTransport(UpdateRoute::Lte);
         error = power.wakeUp(this);
         if (error == Error::None && operation != Operation::ReportDownload && config.transferBaud != config.baud) {
           if (platform.fastUartSafe()) {
