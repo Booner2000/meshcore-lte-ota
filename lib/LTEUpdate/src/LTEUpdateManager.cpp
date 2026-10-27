@@ -184,6 +184,7 @@ void LTEUpdateManager::run(Operation operation) {
   const bool priorSleep = power.isSleepRequested();
   platform.log(operation == Operation::SimulateUpdate ? "Update job accepted (simulation)" : "Modem job accepted");
   Error error = cancelled() ? Error::Cancelled : Error::None;
+  bool fastAttempt = false;
   if (error == Error::None) {
     switch (operation) {
       case Operation::SimulateUpdate: error = simulate(); break;
@@ -195,6 +196,12 @@ void LTEUpdateManager::run(Operation operation) {
       case Operation::ReportDownload:
         transition(State::MODEM_BOOT, 0);
         error = power.wakeUp(this);
+        if (error == Error::None && operation != Operation::ReportDownload && config.transferBaud != config.baud) {
+          if (platform.fastUartSafe()) {
+            fastAttempt = true;
+            error = power.setTemporaryBaud(config.transferBaud, this);
+          } else platform.log("Fast UART withheld: rollback image lacks verified recovery");
+        }
         if (error == Error::None) error = operation==Operation::ReportDownload ? platform.reportDownload(*this) : operation==Operation::InstallUpdate ? platform.installUpdate(*this) : platform.downloadUpdate(*this);
         break;
       default: error = Error::BadConfig; break;
@@ -204,8 +211,13 @@ void LTEUpdateManager::run(Operation operation) {
   if (error == Error::None && cancelled()) error = Error::Cancelled;
   // Cleanup intentionally ignores user cancel, but each AT request has a deadline.
   Error cleanup = Error::None;
+  if (fastAttempt) {
+    // Includes an interrupted/ambiguous IPR command. Ignore user cancellation.
+    cleanup = power.wakeUp();
+    if (cleanup != Error::None) platform.log("UART baseline restore failed; activation blocked");
+  }
   if ((operation == Operation::ModemTest || operation == Operation::SimulateUpdate || operation == Operation::DownloadTest || operation == Operation::ReportDownload || operation == Operation::InstallUpdate || error != Error::None) &&
-      config.sleepControl && power.isSleepRequested() != priorSleep) {
+      cleanup == Error::None && config.sleepControl && power.isSleepRequested() != priorSleep) {
     cleanup = power.setSleep(priorSleep);
     if (cleanup != Error::None) platform.log("Sleep restore failed; S remains awake (fail safe)");
   }

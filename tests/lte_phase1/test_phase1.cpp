@@ -23,6 +23,8 @@ struct FakePlatform : Platform {
   std::vector<std::pair<int, bool>> pins;
   std::vector<std::string> logs;
   bool accept = true;
+  bool allowFast=false;
+  bool fastUartSafe() override {return allowFast;}
   std::function<void()> onWait;
   std::function<void(const char*)> onLog;
   std::function<void(int,bool)> onPin;
@@ -40,6 +42,7 @@ struct FakeUart : ByteUart {
   bool beginOk = true;
   bool writeOk = true;
   bool begun = false;
+  uint32_t hostBaud=115200,modemBaud=115200;
   unsigned starts = 0, ends = 0;
   std::string commandBuffer, incoming;
   std::vector<std::string> commands;
@@ -47,15 +50,18 @@ struct FakeUart : ByteUart {
   Error ioFault = Error::None;
   std::function<void(const std::string&)> onCommand;
   explicit FakeUart(FakePlatform& p) : platform(p) {}
-  bool begin(const LTEUpdateConfig&) override { ++starts; begun = beginOk; return beginOk; }
+  bool begin(const LTEUpdateConfig& c) override { ++starts;hostBaud=c.baud;begun = beginOk; return beginOk; }
   void end() override { ++ends; begun = false; }
   bool write(const char* data, size_t length) override {
     if (!writeOk) return false;
     for (size_t i = 0; i < length; ++i) {
       if (data[i] != '\r') { commandBuffer += data[i]; continue; }
       commands.push_back(commandBuffer);
+      if(hostBaud!=modemBaud){commandBuffer.clear();continue;}
       auto& scripted = replies[commandBuffer];
       if (!scripted.empty()) { incoming = scripted.front(); scripted.pop_front(); }
+      else if (commandBuffer == "AT+IPR?") incoming="\r\n+IPR: "+std::to_string(modemBaud)+"\r\nOK\r\n";
+      else if (commandBuffer.find("AT+IPR=")==0) {modemBaud=std::stoul(commandBuffer.substr(7));incoming="\r\nOK\r\n";}
       else if (commandBuffer == "AT+CGMM") incoming = "\r\nA7670E\r\nOK\r\n";
       else if (commandBuffer == "AT+CGMR") incoming = "\r\nV1.2.3\r\nOK\r\n";
       else if (commandBuffer == "AT+CPIN?") incoming = "\r\n+CPIN: READY\r\nOK\r\n";
@@ -394,13 +400,33 @@ static void testCliWhileWorkerWaits() {
   worker.join();
   CHECK(f.manager.snapshot().state == State::CANCELLED && !f.uart.begun);
 }
+static void testBaudRecovery() {
+  for(uint32_t rate:{115200u,230400u,460800u,921600u}){
+    FakePlatform p;FakeUart uart(p);auto c=sleepConfig();c.wakeTimeoutMs=15000;
+    uart.modemBaud=rate;A7670Transport transport(uart,p,c);ModemPower power(p,c,transport);
+    CHECK(power.begin()==Error::None);CHECK(power.wakeUp()==Error::None);
+    CHECK(uart.hostBaud==115200 && uart.modemBaud==115200);
+    CHECK(p.clock<16000);CHECK(power.setSleep(true)==Error::None);
+    CHECK(power.isSleepRequested());
+    for(const auto& command:uart.commands)CHECK(command.find("IPREX")==std::string::npos);
+  }
+  {FakePlatform p;FakeUart uart(p);auto c=sleepConfig();c.wakeTimeoutMs=15000;
+   A7670Transport t(uart,p,c);ModemPower power(p,c,t);power.begin();CHECK(power.wakeUp()==Error::None);
+   CHECK(power.setTemporaryBaud(460800)==Error::None);
+   CHECK(uart.hostBaud==460800 && uart.modemBaud==460800);
+   CHECK(power.wakeUp()==Error::None);CHECK(uart.hostBaud==115200 && uart.modemBaud==115200);}
+  {FakePlatform p;FakeUart uart(p);auto c=sleepConfig();c.wakeTimeoutMs=15000;
+   uart.writeOk=false;A7670Transport t(uart,p,c);ModemPower power(p,c,t);power.begin();
+   CHECK(power.wakeUp()==Error::AtTimeout);CHECK(p.clock<17000);CHECK(!power.isSleepRequested());}
+}
 int main() {
   testCommandsAndSimulation(); testCancelAtEveryStage(); testQueueAndConfigFailures();
   testParser(); testDiagnosticAndRedaction(); testSleepRoundTrip();
   testSleepFailureAndRestore(); testFailureClassificationAndBounds(); testNoOtaImplementation();
   testCliWhileWorkerWaits(); testPowerAndTransactionExclusion(); testExtendedDiagnosticError();
   testCancelManualSleepBoundary();
-  printf("PASS: %u checks; 13 test groups; no hardware or flash access\n", checks);
+  testBaudRecovery();
+  printf("PASS: %u checks; 14 test groups; no hardware or flash access\n", checks);
   printf("sizeof(Status)=%zu; sizeof(LTEUpdateManager)=%zu\n", sizeof(Status), sizeof(LTEUpdateManager));
   return 0;
 }

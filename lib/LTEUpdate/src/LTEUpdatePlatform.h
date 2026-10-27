@@ -20,6 +20,8 @@ public:
   virtual Error activateUpdate(bool) { return Error::NotImplemented; }
   virtual Error reportDownload(Cancellation&) { return Error::NotImplemented; }
   virtual uint32_t currentUtc() { return 0; }
+  // Device implementation checks every rollback-capable image, off the radio task.
+  virtual bool fastUartSafe() { return false; }
 };
 class Lock {
   Platform& platform;

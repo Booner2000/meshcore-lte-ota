@@ -47,6 +47,8 @@ See [the signed update protocol](docs/update-protocol.md) for the server contrac
 
 See [transfer measurements](docs/transfer-performance.md) for tested baud rates, data overhead, compression potential and the reset-recovery prerequisite for higher production speeds.
 
+The [UART recovery and staged migration](docs/uart-recovery.md) describes bounded baud detection, baseline restoration and the valid fallback check before faster transfers. gzip remains disabled.
+
 URL changes are admin commands, take effect for the next job, survive reboot and are rejected while a job or boot health check is active. The maximum base URL length is 112 characters; credentials, query strings, fragments and unsafe path characters are rejected. The new server must use the existing trusted CA and firmware signing key. Changing the URL does not change trust settings. Manifest, firmware and report routes all follow the configured base path. The URL extension has native regression coverage and is compiled; on-device persistence and a move to another HTTPS host still require hardware validation.
 
 ## Tests and maintenance

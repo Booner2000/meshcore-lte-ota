@@ -43,3 +43,12 @@ See the [ESP-IDF 4.4.7 OTA documentation](https://docs.espressif.com/projects/es
 ## Tested modem read behavior
 
 On the tested A7670E firmware, explicit nonzero `HTTPREAD` offsets were observed to advance relative to the current read position. Requests at offsets 0, 1024 and 2048 returned image data starting at 0, 2048 and 5120 respectively. Treating them as absolute positions is unsafe. The client therefore selects READMODE=0 and issues sequential `AT+HTTPREAD=<count>` commands. An ERROR before a data header is retried locally at most three times with bounded backoff. A partial binary response, invalid length or invalid trailer aborts that read. The final signed SHA-256 and independent flash readback remain mandatory.
+
+## UART recovery compatibility
+
+Recovery-capable builds additionally require `MESHCORE_LTE_UART_RECOVERY:v1`
+inside the SDK-verified image before activation. Keep this marker check when
+updating MeshCore. A signed older LTE image that lacks recovery is rejected.
+The publishing server should enforce both LTE and UART recovery markers for new
+uploads; existing historical artifacts may remain in its audit history.
+See [the staged migration](uart-recovery.md) before enabling higher UART rates.

@@ -25,6 +25,7 @@ uint32_t otaReleaseFloor();
 bool otaInstalledReport(char* firmware, char* sha);
 void otaReportAcknowledged();
 Error otaRollbackProbe();
+bool otaFastUartSafe();
 extern const char OtaCapability[];
 }
 #endif

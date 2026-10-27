@@ -27,6 +27,7 @@ class EspUart : public ByteUart {
   Error lastFault = Error::None;
   int tx = -1, rx = -1;
 public:
+  std::atomic<uint32_t> currentBaud{115200};
 #if defined(LTE_HARDWARE_DIAGNOSTICS) && LTE_HARDWARE_DIAGNOSTICS
   std::atomic<uint32_t> txBytes{0}, rxBytes{0}, uartFaults{0};
 #endif
@@ -50,6 +51,7 @@ public:
       end(); return false;
     }
     lastFault = Error::None;
+    currentBaud.store(config.baud);
     return true;
   }
   void end() override {
@@ -108,6 +110,7 @@ public:
 };
 class EspPlatform : public Platform {
 public:
+  bool fastUartSafe() override { return otaFastUartSafe(); }
   UpdateEndpoint endpoint;
   ByteUart* uart = nullptr;
   LTEUpdateManager* manager = nullptr;
@@ -210,7 +213,9 @@ struct Service {
     running = xTaskCreatePinnedToCore(task, "LTEUpdate", config.taskStackBytes,
                                     this, 1, &platform.worker, 0) == pdPASS;
     if (!running) platform.log("Worker creation failed");
-    if(running && (otaPendingHealth() || otaRestoreSleep())){
+    // Every boot probes/normalizes the independently powered modem, even when
+    // the previous boot did not request sleep or died during a fast transfer.
+    if(running){
       bootProbeQueued=true;char reply[CliReplySize];
       manager.handleCommand(otaRestoreSleep()?"lte modem sleep":"lte modem test",reply,sizeof(reply));
     }
@@ -255,7 +260,7 @@ bool serviceCommand(const char* command, char* reply, size_t capacity) {
   if (commandEquals(command, "lte modem io") && self.running) {
     const int level = self.config.sleepControl ? gpio_get_level(static_cast<gpio_num_t>(self.config.sleepPin)) : -1;
     snprintf(reply, capacity, "uart=%d tx=%d rx=%d baud=%lu S=%d level=%d txbytes=%lu rxbytes=%lu faults=%lu",
-      self.config.uart, self.config.txPin, self.config.rxPin, static_cast<unsigned long>(self.config.baud),
+      self.config.uart, self.config.txPin, self.config.rxPin, static_cast<unsigned long>(self.uart.currentBaud.load()),
       self.config.sleepPin, level, static_cast<unsigned long>(self.uart.txBytes.load()),
       static_cast<unsigned long>(self.uart.rxBytes.load()), static_cast<unsigned long>(self.uart.uartFaults.load()));
     return true;

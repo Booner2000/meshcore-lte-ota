@@ -8,10 +8,24 @@ Error A7670Transport::begin() {
   if (started) return Error::None;
   if (!uart.begin(config)) return Error::UartInit;
   started = true;
+  baud = config.baud;
   char message[64];
   snprintf(message, sizeof(message), "UART%d initialized baud=%lu 8N1", config.uart,
            static_cast<unsigned long>(config.baud));
   platform.log(message);
+  return Error::None;
+}
+Error A7670Transport::setBaud(uint32_t rate) {
+  if (transacting) return Error::Busy;
+  if (rate != 115200 && rate != 230400 && rate != 460800 && rate != 921600) return Error::BadConfig;
+  if (started && baud == rate) { uart.discardInput(); return Error::None; }
+  if (started) uart.end();
+  started = false;
+  LTEUpdateConfig temporary = config;
+  temporary.baud = rate; // Host UART only; deployment baseline remains unchanged.
+  if (!uart.begin(temporary)) return Error::UartInit;
+  started = true; baud = rate; needsResync = false;
+  uart.discardInput();
   return Error::None;
 }
 void A7670Transport::end() {

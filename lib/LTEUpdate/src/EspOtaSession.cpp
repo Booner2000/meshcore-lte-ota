@@ -6,6 +6,7 @@
 #include <esp_system.h>
 #include <string.h>
 #include <atomic>
+#include <esp_image_format.h>
 #ifndef CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE
 #error LTE OTA requires a rollback-enabled SDK and matching installed bootloader
 #endif
@@ -13,7 +14,26 @@
 extern "C" bool verifyRollbackLater() { return true; }
 namespace lte {
 const char OtaCapability[] = "MESHCORE_LTE_OTA:xiao-s3-wio-b2b-lte-v1:2";
+// Retained through an actual reference in verification, not a dead string.
+const char UartRecoveryCapability[] = "MESHCORE_LTE_UART_RECOVERY:v1";
 namespace {
+bool recoveryImage(const esp_partition_t* partition) {
+  if(!partition)return false;
+  esp_partition_pos_t pos={partition->address,partition->size};
+  esp_image_metadata_t metadata={};
+  if(esp_image_verify(ESP_IMAGE_VERIFY_SILENT,&pos,&metadata)!=ESP_OK)return false;
+  const size_t markerSize=sizeof(UartRecoveryCapability)-1;
+  uint8_t buffer[1024+sizeof(UartRecoveryCapability)]={};size_t tail=0;
+  for(uint32_t offset=0;offset<metadata.image_len;){
+    size_t count=std::min(size_t(metadata.image_len-offset),size_t(1024));
+    if(esp_partition_read(partition,offset,buffer+tail,count)!=ESP_OK)return false;
+    for(size_t i=0;i+markerSize<=tail+count;++i)
+      if(!memcmp(buffer+i,UartRecoveryCapability,markerSize))return true;
+    const size_t total=tail+count;tail=std::min(total,markerSize-1);
+    memmove(buffer,buffer+total-tail,tail);offset+=count;delay(1);
+  }
+  return false;
+}
 std::atomic<bool> pending{false};
 esp_timer_handle_t bootTimer = nullptr;
 uint32_t healthySince = 0, loops = 0;
@@ -23,6 +43,12 @@ bool matchingPending(Preferences& p) {
   const esp_partition_t* running = esp_ota_get_running_partition();
   return running && p.getUInt("part",0) == running->address;
 }
+}
+bool otaFastUartSafe() {
+  const esp_partition_t* other=esp_ota_get_next_update_partition(nullptr);
+  esp_ota_img_states_t state;
+  return other && esp_ota_get_state_partition(other,&state)==ESP_OK &&
+    state==ESP_OTA_IMG_VALID && recoveryImage(other);
 }
 uint32_t otaReleaseFloor() {
   Preferences p;
@@ -57,6 +83,8 @@ Error EspOtaSession::finish() {
   if(!otaRawHash(partition,length,digest)) return Error::FlashError;
   char actual[65];for(unsigned i=0;i<32;++i)snprintf(actual+i*2,3,"%02x",digest[i]);
   if(strcmp(actual,hash))return Error::HashMismatch;
+  // A correctly signed old LTE build must not remove baud recovery.
+  if(!recoveryImage(partition))return Error::BadConfig;
   finished=true;return Error::None;
 }
 Error EspOtaSession::activate(bool sleepAllowed) {

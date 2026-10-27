@@ -43,4 +43,10 @@ The owner confirmed that the configured SIM volume limit had been reached. Onlin
 
 Safe compression would require authenticated transport metadata, bounded streaming decompression into the inactive partition, original-image size/hash checks, bounded retries and reset/rollback qualification. Serving gzip transparently to the current raw-image client would fail its length/hash checks. Certificate or signature checks must remain enabled throughout any optimization.
 
-The production profile remains at 115200 baud with 32-KiB ranges and fresh HTTP contexts. Remaining work is staged baud recovery, then a small production-stack transfer test; data-saving transport changes require further online tests once the SIM is available.
+At the end of this initial series, the production profile remained at 115200 baud with 32-KiB ranges and fresh HTTP contexts. See [UART recovery](uart-recovery.md) for the subsequent migration design.
+
+## Follow-up after the SIM limit was increased
+
+A 64-KiB range at 460800 baud, using 1024-byte UART reads, completed in 6.406 seconds with the expected SHA-256, zero UART faults and no local read retries. UART reading took 2.094 seconds. The subsequent request for 2048-byte reads did not complete successfully; responses still included 1024-byte lengths. Larger UART read blocks remain unqualified.
+
+The shared fixture measurement budget reached 448 KiB of requested file payload. This excludes mobile protocol overhead. gzip was explicitly deferred by the owner and is not used. The tested repeater application was restored after this measurement.

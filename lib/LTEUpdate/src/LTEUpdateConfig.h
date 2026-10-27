@@ -17,6 +17,9 @@
 #ifndef LTE_MODEM_UART_BAUD
 #define LTE_MODEM_UART_BAUD 115200
 #endif
+#ifndef LTE_MODEM_TRANSFER_BAUD
+#define LTE_MODEM_TRANSFER_BAUD 460800
+#endif
 
 namespace lte {
 struct LTEUpdateConfig {
@@ -24,6 +27,7 @@ struct LTEUpdateConfig {
   int txPin = 43;
   int rxPin = 44;
   uint32_t baud = LTE_MODEM_UART_BAUD;
+  uint32_t transferBaud = LTE_MODEM_TRANSFER_BAUD;
   bool powerControl = LTE_MODEM_POWER_CONTROL != 0;
   int enablePin = -1;
   int pwrkeyPin = -1;
@@ -39,7 +43,8 @@ struct LTEUpdateConfig {
   uint32_t taskStackBytes = 6144;
   // This validator deliberately only supports the audited B2B WIO target.
   bool valid() const {
-    if (uart != 1 || txPin != 43 || rxPin != 44 || baud == 0 ||
+    if (uart != 1 || txPin != 43 || rxPin != 44 || baud != 115200 ||
+        (transferBaud != 115200 && transferBaud != 230400 && transferBaud != 460800) ||
         atTimeoutMs < 20 || atTimeoutMs > 30000 || identityTimeoutMs < 20 ||
         identityTimeoutMs > 30000 || wakeTimeoutMs < 20 || wakeTimeoutMs > 60000 ||
         simulationStepMs == 0 || simulationStepMs > 10000 ||

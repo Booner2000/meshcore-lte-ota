@@ -20,6 +20,7 @@ public:
   Error powerOn();
   Error powerOff();
   Error wakeUp(Cancellation* cancel = nullptr);
+  Error setTemporaryBaud(uint32_t baud, Cancellation* cancel = nullptr);
   Error setSleep(bool enable, Cancellation* cancel = nullptr);
   bool isSleepRequested() const { return sleepRequested; }
 };
