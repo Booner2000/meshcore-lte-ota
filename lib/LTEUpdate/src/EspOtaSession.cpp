@@ -76,7 +76,7 @@ Error EspOtaSession::finish() {
   if(!handle) return Error::NotReady;
   const esp_err_t result=esp_ota_end(handle);handle=0;
   if(result!=ESP_OK) return Error::FlashError;
-  // Independent readback proves that the inactive flash matches the signed hash.
+  // Independent readback proves that the inactive flash matches the manifest hash.
   uint8_t digest[32];
   // esp_partition_get_sha256 hashes the ESP image excluding appended hash/padding;
   // use an explicit raw-size hash instead, implemented below.
@@ -84,7 +84,7 @@ Error EspOtaSession::finish() {
   if(!otaRawHash(partition,length,digest)) return Error::FlashError;
   char actual[65];for(unsigned i=0;i<32;++i)snprintf(actual+i*2,3,"%02x",digest[i]);
   if(strcmp(actual,hash))return Error::HashMismatch;
-  // A correctly signed old LTE build must not remove baud recovery.
+  // An old LTE build must not remove baud recovery.
   if(!imageMarker(partition,UartRecoveryCapability) || !imageMarker(partition,WifiOtaCapability))return Error::BadConfig;
   finished=true;return Error::None;
 }

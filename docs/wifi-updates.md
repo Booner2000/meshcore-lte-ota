@@ -10,19 +10,20 @@ it never displays passwords. Existing radio admin authorization is unchanged.
 
 WLAN scan/association has a 20-second overall deadline, preferring stronger known
 access points. Unknown or unreachable WLANs lead to one LTE fallback. A failed
-certificate check, invalid signature, wrong hardware, old release, wrong hash or
-blocked station aborts the update instead. The worker performs networking; the
+wrong hardware, old release, wrong hash or blocked station aborts the update instead. The worker performs networking; the
 repeater loop does not wait for association or HTTPS. A pre-existing station
 connection is borrowed; an existing manual OTA access point is not seized.
 The original `start ota` is still the separate upstream hotspot/manual uploader.
 
 ## One validation and installation pipeline
 
-`UpdateSession` owns manifest verification, Ed25519 signatures, target/version
+`UpdateSession` owns manifest parsing, target/version
 checks, streaming SHA-256, inactive-slot writing and independent flash readback.
 `A7670Http` and `WifiHttp` implement only their respective HTTP transports.
-Both use the same endpoint, station public key, name, signing key, certificate
-authority, release floor and OTA health/rollback mechanism.
+Both use the same endpoint, station public key, name, release floor and OTA
+health/rollback mechanism. Since .8, firmware HTTPS skips certificate verification
+and manifest signatures are not checked. The protected WLAN configuration path
+still verifies certificates and requires its separate device credentials.
 
 WLAN requests the image in one bounded HTTPS response and streams it through the
 same 1024-byte buffer. It does not store the complete image in RAM. Response
@@ -34,8 +35,8 @@ staged image can be reported over LTE without downloading it again.
 
 An activated image must retain `MESHCORE_WIFI_OTA:v1` as well as the LTE and UART
 recovery capabilities inside the SDK-verified image. The publisher should check
-all three markers before signing. These markers assert reviewed capabilities;
-they do not replace the cryptographic signature or content verification.
+all three markers before publishing. These markers prevent accidental capability
+loss; they do not prove authenticity. Whole-image hashing still detects corruption.
 
 ## Shared WLAN administration
 

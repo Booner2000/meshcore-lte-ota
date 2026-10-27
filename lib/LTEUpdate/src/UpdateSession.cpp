@@ -1,7 +1,5 @@
 #include "UpdateSession.h"
 #if defined(WITH_LTE_OTA) && WITH_LTE_OTA
-#include "TrustedKey.h"
-#include <Ed25519.h>
 #include <mbedtls/sha256.h>
 #include <cJSON.h>
 #include <algorithm>
@@ -42,24 +40,7 @@ Error UpdateSession::run(bool reportOnly) {
   if(!http.readBody(0,reinterpret_cast<uint8_t*>(manifest),http.actionLength))return http.failure;
   cJSON* json=cJSON_Parse(manifest);
   if(!json)return Error::BadResponse;
-  if(installer){
-    const cJSON* payload=cJSON_GetObjectItemCaseSensitive(json,"signed_payload");
-    const cJSON* signature=cJSON_GetObjectItemCaseSensitive(json,"signature");
-    uint8_t publicKey[32],sig[64];
-    const auto decode=[](const char* text,uint8_t* out,size_t count)->bool {
-      if(!text || strlen(text)!=count*2)return false;
-      for(size_t i=0;i<count;++i){
-        unsigned value=0;
-        for(unsigned j=0;j<2;++j){char c=text[2*i+j];if(c<'0'||(c>'9'&&c<'a')||c>'f')return false;value=value*16+(c<='9'?c-'0':c-'a'+10);}
-        out[i]=value;
-      }return true;
-    };
-    if(!cJSON_IsString(payload) || !cJSON_IsString(signature) || strlen(payload->valuestring)>1024 ||
-      !decode(LTE_SIGNING_PUBLIC_KEY_HEX,publicKey,32) || !decode(signature->valuestring,sig,64) ||
-      !Ed25519::verify(sig,publicKey,payload->valuestring,strlen(payload->valuestring))){cJSON_Delete(json);return Error::SignatureInvalid;}
-    cJSON* signedJson=cJSON_Parse(payload->valuestring);cJSON_Delete(json);json=signedJson;
-    if(!json)return Error::BadResponse;
-  }
+  // Update manifests are deliberately unsigned. Identity is public, not authenticated.
   const auto string=[json](const char* key)->const char* {const cJSON* v=cJSON_GetObjectItemCaseSensitive(json,key);return cJSON_IsString(v)?v->valuestring:"";};
   char firmware[25],path[100],hash[65];
   snprintf(firmware,sizeof(firmware),"%s",string("id"));snprintf(path,sizeof(path),"%s",string("download_path"));snprintf(hash,sizeof(hash),"%s",string("sha256"));
@@ -125,7 +106,7 @@ Error UpdateSession::run(bool reportOnly) {
   if(installer){
     if(!capabilitySeen)return Error::BadConfig;
     Error e=installer->finish();if(e!=Error::None)return e;
-    platform.log("Signed image verified in inactive OTA slot; not yet activated");
+    platform.log("Image verified in inactive OTA slot; not yet activated");
   }else platform.log("SHA256 verified on ESP32; image not installed");
   memcpy(verified.key,publicKey,64);verified.key[64]=0;
   snprintf(verified.id,sizeof(verified.id),"%s",firmware);snprintf(verified.hash,sizeof(verified.hash),"%s",hash);

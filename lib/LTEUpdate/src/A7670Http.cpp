@@ -155,7 +155,8 @@ bool A7670Http::post(const char* payload) {
   return true;
 }
 
-bool A7670Http::prepare() {
+bool A7670Http::prepare() { return prepareWithPeerVerification(false); }
+bool A7670Http::prepareWithPeerVerification(bool verifyPeer) {
   manager.reportProgress(State::REGISTER,5);
   bool simReady=false;
   if (!command("ATE0") || !command("AT+CMEE=2") || !command("AT+CPIN?",5000,"+CPIN: READY",&simReady))return false;
@@ -169,6 +170,7 @@ bool A7670Http::prepare() {
     if(!networkRegistered){platform.log("Packet service not ready; no forced reattach");{failure=Error::NotReady;return false;}}
     if(!command("AT+CGATT=1",60000))return false;
   }
+  if(verifyPeer){
   const time_t utc=platform.currentUtc();
   if(utc<1767225600 || utc>2524608000) { platform.log("Set a valid MeshCore clock before TLS");{failure=Error::BadConfig;return false;} }
   struct tm time={};gmtime_r(&utc,&time);
@@ -179,6 +181,12 @@ bool A7670Http::prepare() {
     "AT+CSSLCFG=\"ignorelocaltime\",0,0", "AT+CSSLCFG=\"enableSNI\",0,1",
     "AT+CSSLCFG=\"ignorecertCN\",0,0", "AT+CSSLCFG=\"cacert\",0,\"update-root.pem\""};
   for(const char* cmd:tls) if(!command(cmd)) {failure=Error::TlsConfig;return false;}
+  }else{
+    const char* tls[]={"AT+CSSLCFG=\"sslversion\",0,3", "AT+CSSLCFG=\"authmode\",0,0",
+      "AT+CSSLCFG=\"ignorelocaltime\",0,1", "AT+CSSLCFG=\"enableSNI\",0,1",
+      "AT+CSSLCFG=\"ignorecertCN\",0,1"};
+    for(const char* cmd:tls)if(!command(cmd)){failure=Error::TlsConfig;return false;}
+  }
   command("AT+HTTPTERM");failure=Error::None;
   if(!command("AT+HTTPINIT",60000))return false;
   initialized=true;
@@ -200,7 +208,8 @@ void A7670Http::close() {
 }
 Error A7670Http::refreshWifiConfig(WifiConfig& config){
   if(!config.username[0])return Error::NotImplemented;
-  if(!prepare()){Error result=failure;close();return result;}
+  // Never send WLAN management credentials over the unverified update context.
+  if(!prepareWithPeerVerification(true)){Error result=failure;close();return result;}
   char pair[196]={},encoded[272]={},cmd[400]={};size_t encodedSize=0;
   snprintf(pair,sizeof(pair),"%s:%s",config.username,config.password);
   if(mbedtls_base64_encode(reinterpret_cast<uint8_t*>(encoded),sizeof(encoded),&encodedSize,reinterpret_cast<const uint8_t*>(pair),strlen(pair))!=0){close();return Error::BadConfig;}

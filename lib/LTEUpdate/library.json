@@ -1,6 +1,6 @@
 {
   "name": "LTEUpdate",
-  "version": "0.3.0",
-  "description": "Modular MeshCore LTE OTA with signed manifests, inactive-slot writes and boot health rollback",
+  "version": "0.4.0",
+  "description": "Modular MeshCore LTE OTA with unsigned manifests, inactive-slot writes and boot health rollback",
   "build": { "includeDir": "src" }
 }

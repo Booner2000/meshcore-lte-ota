@@ -34,8 +34,10 @@ bool readExact(HTTPClient& http,Platform& p,Cancellation& cancel,uint8_t* out,si
   }
   return true;
 }
-void secure(WiFiClientSecure& client,HTTPClient& http){
-  client.setCACert(RootCa);client.setHandshakeTimeout(8);
+void secure(WiFiClientSecure& client,HTTPClient& http,bool verifyPeer=true){
+  // Management requests keep CA/hostname/date validation; firmware deliberately does not.
+  if(verifyPeer)client.setCACert(RootCa);else client.setInsecure();
+  client.setHandshakeTimeout(8);
   http.setConnectTimeout(8000);http.setTimeout(5000);http.setReuse(false);
   http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
 }
@@ -117,14 +119,13 @@ WifiHttp::WifiHttp(Platform& p,Cancellation& c,const UpdateEndpoint& e,const cha
 bool WifiHttp::prepare(){
   if(cancel.cancelled()){failure=Error::Cancelled;return false;}
   if(!WiFi.isConnected()){failure=Error::NetworkUnavailable;return false;}
-  if(!setClock(platform)){failure=Error::BadConfig;return false;}
   return true;
 }
 bool WifiHttp::begin(const char* route){
   close();failure=Error::None;readOffset=0;
   if(cancel.cancelled()){failure=Error::Cancelled;return false;}
   char url[360];if(!endpoint.apiUrl(url,sizeof(url),route,identity)){failure=Error::BadConfig;return false;}
-  secure(client,http);
+  secure(client,http,false);
   if(!http.begin(client,url)){failure=Error::BadConfig;return false;}
   const char* headers[]={"Content-Encoding","Content-Range","Transfer-Encoding"};http.collectHeaders(headers,3);
   http.addHeader("Accept-Encoding","identity");return true;

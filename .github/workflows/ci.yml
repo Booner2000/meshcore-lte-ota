@@ -24,7 +24,7 @@ jobs:
           from pathlib import Path
           import shutil
           root = Path('lib/LTEUpdate/src')
-          for stem in ('LTEDeploymentConfig', 'TrustAnchor', 'TrustedKey'):
+          for stem in ('LTEDeploymentConfig', 'TrustAnchor'):
               shutil.copyfile(root / (stem + '.example.h'), root / (stem + '.h'))
           PY
       - run: python scripts/prepare_meshcore.py

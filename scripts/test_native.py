@@ -54,3 +54,6 @@ endpoint_command = [args.compiler] + (['c++'] if args.zig else []) + [
     str(root/'tests/lte_http/test_endpoint.cpp'), str(module/'UpdateEndpoint.cpp'), '-o', str(endpoint_exe)]
 subprocess.run(endpoint_command,cwd=root,check=True)
 subprocess.run([str(endpoint_exe)],cwd=root,check=True)
+
+# Guard the distinct trust boundaries even when building on a host without ESP APIs.
+subprocess.run([__import__("sys").executable, str(root/"scripts/test_update_policy.py")], check=True)

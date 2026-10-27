@@ -22,6 +22,7 @@ class A7670Http : public UpdateHttp {
   bool receiveLine(uint32_t timeout, bool cancellable = true);
   bool command(const char* text, uint32_t timeout = 5000, const char* find = nullptr, bool* found = nullptr, bool sensitive = false);
   bool certificate();
+  bool prepareWithPeerVerification(bool verifyPeer);
   bool get(const char* path, int rangeStart = -1, int rangeEnd = -1);
   bool readBody(uint32_t offset, uint8_t* data, size_t count);
   bool post(const char* payload) override;
