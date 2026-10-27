@@ -38,7 +38,7 @@ void secure(WiFiClientSecure& client,HTTPClient& http,bool verifyPeer=true){
   // Management requests keep CA/hostname/date validation; firmware deliberately does not.
   if(verifyPeer)client.setCACert(RootCa);else client.setInsecure();
   client.setHandshakeTimeout(8);
-  http.setConnectTimeout(8000);http.setTimeout(5000);http.setReuse(false);
+  http.setConnectTimeout(8000);http.setTimeout(20000);http.setReuse(false);
   http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
 }
 }

@@ -422,6 +422,8 @@ static void testBaudRecovery() {
 }
 int main() {
   CHECK(wifiConnectFailure(0)==Error::NetworkUnavailable);
+  CHECK(wifiConnectFailure(48)==Error::NetworkUnavailable); // Successful TLS socket, subsequent HTTP timeout
+  CHECK(wifiConnectFailure(1)==Error::NetworkUnavailable);
   CHECK(wifiConnectFailure(-1)==Error::NetworkUnavailable);
   CHECK(wifiConnectFailure(-9984)==Error::TlsConfig); // X509 verification failure
   CHECK(wifiConnectFailure(-8576)==Error::TlsConfig); // Invalid CA/PEM input

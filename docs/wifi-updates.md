@@ -9,8 +9,7 @@ reports whether a WLAN cache exists, its network count and configuration version
 it never displays passwords. Existing radio admin authorization is unchanged.
 
 WLAN scan/association has a 20-second overall deadline, preferring stronger known
-access points. Unknown or unreachable WLANs lead to one LTE fallback. A failed
-wrong hardware, old release, wrong hash or blocked station aborts the update instead. The worker performs networking; the
+access points. Unknown or unreachable WLANs lead to one LTE fallback. Wrong hardware, an old release, a wrong hash or a blocked station aborts the update. The worker performs networking; the
 repeater loop does not wait for association or HTTPS. A pre-existing station
 connection is borrowed; an existing manual OTA access point is not seized.
 The original `start ota` is still the separate upstream hotspot/manual uploader.
@@ -134,3 +133,13 @@ once for successful installation and once for the intentionally wrong-hash WLAN
 test. The only LTE file payload in this WLAN qualification was the 64-KiB fallback
 fixture; small configuration requests and protocol overhead are additional.
 Test records distinguish transported data, verified data and confirmed installation.
+
+## HTTP timeout classification correction (.9)
+
+Arduino-ESP32 2.0.17 `start_ssl_client` returns a nonnegative socket descriptor
+on success, and `WiFiClientSecure::lastError` retains it. A later HTTP timeout
+(`HTTPC_ERROR_READ_TIMEOUT`, -11) must not turn a successful TLS descriptor
+(such as 48) into TLS_CONFIG. The classifier treats nonnegative values as a
+network/HTTP failure; genuine negative certificate errors remain TLS_CONFIG.
+HTTP header waits remain bounded, increased from 5 to 20 seconds.
+This does not fix a stalled server or weaken the protected configuration service.
