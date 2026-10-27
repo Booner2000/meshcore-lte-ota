@@ -36,11 +36,16 @@ Local configuration files, firmware binaries and build directories are ignored. 
 - `start lte download` — real LTE download and checksum verification; consumes data
 - `lte update report` — retry a download or persistent installation report without downloading again
 - `lte ota status` — running slot, image state, pending health and release floor
+- `lte update url` — show the current HTTPS base URL
+- `lte update url https://updates.example.invalid/meshcoreupdate` — persist a new base URL in NVS
+- `lte update url reset` — restore the build default
 - `lte update status`, `lte update cancel`
 
 Radio administration continues through MeshCore's existing admin authorization. Device requests use the public MeshCore key and name, without a device token. Such identity is spoofable and must not be treated as cryptographic device authentication.
 
 See [the signed update protocol](docs/update-protocol.md) for the server contract and boot safety rules.
+
+URL changes are admin commands, take effect for the next job, survive reboot and are rejected while a job or boot health check is active. The maximum base URL length is 112 characters; credentials, query strings, fragments and unsafe path characters are rejected. The new server must use the existing trusted CA and firmware signing key. Changing the URL does not change trust settings. Manifest, firmware and report routes all follow the configured base path. The URL extension has native regression coverage and is compiled; on-device persistence and a move to another HTTPS host still require hardware validation.
 
 ## Tests and maintenance
 

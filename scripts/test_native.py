@@ -47,3 +47,10 @@ http_command = [args.compiler] + (['c++'] if args.zig else []) + [
     *[str(module / source) for source in sources], str(module/'A7670BodyReader.cpp'), '-o', str(http_exe)]
 subprocess.run(http_command, cwd=root, check=True)
 subprocess.run([str(http_exe)], cwd=root, check=True)
+
+endpoint_exe = build / ('test_endpoint.exe' if os.name == 'nt' else 'test_endpoint')
+endpoint_command = [args.compiler] + (['c++'] if args.zig else []) + [
+    '-std=c++17', '-Wall', '-Wextra', '-Werror', '-I', str(module),
+    str(root/'tests/lte_http/test_endpoint.cpp'), str(module/'UpdateEndpoint.cpp'), '-o', str(endpoint_exe)]
+subprocess.run(endpoint_command,cwd=root,check=True)
+subprocess.run([str(endpoint_exe)],cwd=root,check=True)

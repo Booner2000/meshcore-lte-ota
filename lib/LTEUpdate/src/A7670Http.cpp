@@ -2,8 +2,8 @@
 #include "A7670BodyReader.h"
 #if defined(WITH_LTE_OTA) && WITH_LTE_OTA
 #include "TrustAnchor.h"
-#include "LTEDeploymentConfig.h"
 #include "TrustedKey.h"
+#include "LTEDeploymentConfig.h"
 #include <Ed25519.h>
 #include <mbedtls/sha256.h>
 #include <cJSON.h>
@@ -19,8 +19,8 @@ namespace {
 struct VerifiedDownload { char key[65]={};char id[25]={};char hash[65]={}; } verified;
 }
 A7670Http::A7670Http(ByteUart& u, Platform& p, LTEUpdateManager& m, Cancellation& c,
-                     const char* publicKey, const char* name)
-  : uart(u), platform(p), manager(m), cancel(c) {
+                     const char* publicKey, const char* name, const UpdateEndpoint& server)
+  : endpoint(server), uart(u), platform(p), manager(m), cancel(c) {
   char encoded[100] = {};
   size_t used = 0;
   const char hex[] = "0123456789ABCDEF";
@@ -117,7 +117,8 @@ bool A7670Http::get(const char* path, int rangeStart, int rangeEnd) {
   if (rangeStart >= 0) snprintf(cmd,sizeof(cmd),"AT+HTTPPARA=\"USERDATA\",\"Range: bytes=%d-%d\"",rangeStart,rangeEnd);
   else snprintf(cmd,sizeof(cmd),"AT+HTTPPARA=\"USERDATA\",\"User-Agent: MeshCoreLTE/0.2\"");
   if (!command(cmd)) return false;
-  const int n=snprintf(cmd,sizeof(cmd),"AT+HTTPPARA=\"URL\",\"" LTE_UPDATE_ORIGIN "%s%s\"",path,identity);
+  char url[360];if(!endpoint.apiUrl(url,sizeof(url),path,identity)){failure=Error::BadConfig;return false;}
+  const int n=snprintf(cmd,sizeof(cmd),"AT+HTTPPARA=\"URL\",\"%s\"",url);
   if (n<0 || n>=int(sizeof(cmd))) {failure=Error::BadConfig;return false;}
   if (!command(cmd)) return false;
   actionStatus=-1;actionLength=0;
@@ -144,7 +145,8 @@ bool A7670Http::report(const char* firmware, const char* hash) {
   initialized=true;
   if(!command("AT+HTTPPARA=\"SSLCFG\",0") || !command("AT+HTTPPARA=\"READMODE\",0"))return false;
   if (!command("AT+HTTPPARA=\"USERDATA\",\"User-Agent: MeshCoreLTE/0.2\"") || !command("AT+HTTPPARA=\"CONTENT\",\"application/json\"")) return false;
-  snprintf(cmd,sizeof(cmd),"AT+HTTPPARA=\"URL\",\"" LTE_UPDATE_ORIGIN "/meshcoreupdate/api/v1/report%s\"",identity);
+  char url[360];if(!endpoint.apiUrl(url,sizeof(url),"report",identity)){failure=Error::BadConfig;return false;}
+  snprintf(cmd,sizeof(cmd),"AT+HTTPPARA=\"URL\",\"%s\"",url);
   if (!command(cmd)) return false;
   snprintf(cmd,sizeof(cmd),"AT+HTTPDATA=%u,10000",unsigned(strlen(payload)));
   uart.discardInput();uart.write(cmd,strlen(cmd));uart.write("\r\n",2);
@@ -209,7 +211,7 @@ Error A7670Http::run(bool reportOnly) {
     if(installedReport)otaReportAcknowledged();
     manager.reportProgress(State::VERIFYING,100);return Error::None;
   }
-  if(!get("/meshcoreupdate/api/v1/manifest"))return failure;
+  if(!get("manifest"))return failure;
   if(actionLength>=2048)return Error::BadResponse;
   char manifest[2048]={};
   if(!readBody(0,reinterpret_cast<uint8_t*>(manifest),actionLength))return failure;
@@ -243,10 +245,12 @@ Error A7670Http::run(bool reportOnly) {
   const bool testData=!strcmp(string("artifact_kind"),"test-data");
   const bool compatible=testData ? (!strcmp(string("target"),"download-test") && !strcmp(string("capability"),"download-test-v1")) :
     (!strcmp(string("artifact_kind"),"firmware") && !strcmp(string("target"),"xiao-s3-wio-b2b-lte-v1") && !strcmp(string("capability"),"lte-ota-v1"));
-  if(installer)snprintf(path,sizeof(path),"/meshcoreupdate/api/v1/firmware/%s",firmware);
+  snprintf(path,sizeof(path),"firmware/%s",firmware);
   cJSON_Delete(json);
   if(installer && (testData || !release || release<=otaReleaseFloor()))return Error::BadConfig;
-  if(!compatible || strlen(firmware)!=24 || strlen(hash)!=64 || strncmp(path,"/meshcoreupdate/api/v1/firmware/",30) || !total || total>0x330000)return Error::BadResponse;
+  if(!compatible || strlen(firmware)!=24 || strlen(hash)!=64 || !total || total>0x330000)return Error::BadResponse;
+  const auto isHex=[](const char* value)->bool {for(;*value;++value)if(!(*value>='0'&&*value<='9')&&!(*value>='a'&&*value<='f'))return false;return true;};
+  if(!isHex(firmware)||!isHex(hash))return Error::BadResponse;
   if(installer){Error e=installer->begin(total,release,firmware,hash);if(e!=Error::None)return e;}
   uint8_t buffer[1024],result[32];
   char tail[80]={};bool capabilitySeen=false;

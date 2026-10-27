@@ -3,6 +3,11 @@
 #include "A7670Http.h"
 #if defined(WITH_LTE_OTA) && WITH_LTE_OTA
 #include <Arduino.h>
+#include <Preferences.h>
+#include "LTEDeploymentConfig.h"
+#ifndef LTE_UPDATE_PATH
+#define LTE_UPDATE_PATH "/meshcoreupdate"
+#endif
 #include <driver/uart.h>
 #include <driver/gpio.h>
 #include <freertos/FreeRTOS.h>
@@ -103,6 +108,7 @@ public:
 };
 class EspPlatform : public Platform {
 public:
+  UpdateEndpoint endpoint;
   ByteUart* uart = nullptr;
   LTEUpdateManager* manager = nullptr;
   char publicKey[65] = {};
@@ -136,10 +142,10 @@ public:
   EspOtaSession* staged = nullptr;
   bool rebootRequested = false;
   Error httpJob(Cancellation& cancel,bool reportOnly, bool install=false) {
-    char key[65], name[33];
-    { Lock guard(*this); memcpy(key,publicKey,sizeof(key)); memcpy(name,stationName,sizeof(name)); }
+    char key[65], name[33];UpdateEndpoint server;
+    { Lock guard(*this); memcpy(key,publicKey,sizeof(key)); memcpy(name,stationName,sizeof(name));server=endpoint; }
     if (!key[0] || !name[0] || !uart || !manager) return Error::BadConfig;
-    A7670Http http(*uart,*this,*manager,cancel,key,name);
+    A7670Http http(*uart,*this,*manager,cancel,key,name,server);
     if(install){delete staged;staged=new EspOtaSession();if(!staged)return Error::NotReady;}
     Error e=http.download(reportOnly,install?staged:nullptr);
     if(e!=Error::None && install){delete staged;staged=nullptr;}
@@ -194,6 +200,12 @@ struct Service {
     platform.jobs = xQueueCreate(1, sizeof(Operation));
     platform.logs = xQueueCreate(8, 176);
     if (!platform.mutex || !platform.jobs || !platform.logs) return false;
+    if(!platform.endpoint.assign(LTE_UPDATE_ORIGIN LTE_UPDATE_PATH))return false;
+    Preferences stored;
+    if(stored.begin("ltecfg",true)){
+      String url=stored.getString("url","");stored.end();
+      if(url.length() && !platform.endpoint.assign(url.c_str()))platform.log("Invalid saved update URL; using build default");
+    }
     if (manager.begin() != Error::None) return false;
     running = xTaskCreatePinnedToCore(task, "LTEUpdate", config.taskStackBytes,
                                     this, 1, &platform.worker, 0) == pdPASS;
@@ -253,6 +265,24 @@ bool serviceCommand(const char* command, char* reply, size_t capacity) {
     if (strncmp(command, "lte ", 4) != 0 && !commandEquals(command, "start lte update")) return false;
     snprintf(reply, capacity, "ERR LTE_NOT_READY: task/configuration");
     return true;
+  }
+  const char* prefix="lte update url";const size_t prefixSize=strlen(prefix);
+  if(!strncmp(command,prefix,prefixSize) && (!command[prefixSize] || command[prefixSize]==' ' || command[prefixSize]=='\t')){
+    const char* value=command+prefixSize;while(*value==' '||*value=='\t')++value;
+    if(commandEquals(command,prefix)){Lock guard(self.platform);snprintf(reply,capacity,"URL %s",self.platform.endpoint.value());return true;}
+    if(serviceBusy()){snprintf(reply,capacity,"ERR BUSY: update URL unchanged");return true;}
+    const bool reset=commandEquals(value,"reset");UpdateEndpoint replacement;
+    if(!replacement.assign(reset?LTE_UPDATE_ORIGIN LTE_UPDATE_PATH:value)){
+      snprintf(reply,capacity,"ERR URL: HTTPS base URL, max 112 chars; no credentials/query/fragment");return true;
+    }
+    Preferences stored;bool saved=false;
+    if(stored.begin("ltecfg",false)){
+      saved=reset?(!stored.isKey("url") || stored.remove("url")):stored.putString("url",replacement.value())>0;
+      stored.end();
+    }
+    if(!saved){snprintf(reply,capacity,"ERR URL_SAVE: URL unchanged");return true;}
+    {Lock guard(self.platform);self.platform.endpoint=replacement;}
+    snprintf(reply,capacity,"OK URL %s",replacement.value());return true;
   }
   return self.manager.handleCommand(command, reply, capacity);
 }

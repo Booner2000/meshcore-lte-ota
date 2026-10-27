@@ -1,6 +1,6 @@
 # Signed update protocol
 
-The firmware client uses three endpoints below `/meshcoreupdate/api/v1/`: `manifest`, `firmware/<id>` and `report`. Devices identify themselves with a public MeshCore key and URL-encoded name. There is no device token. Unknown devices must start blocked; approval is per public key and artifact.
+The firmware client uses three endpoints below the configured base URL followed by `/api/v1/` (default base path `/meshcoreupdate`): `manifest`, `firmware/<id>` and `report`. Devices identify themselves with a public MeshCore key and URL-encoded name. There is no device token. Unknown devices must start blocked; approval is per public key and artifact.
 
 ## Manifest
 
