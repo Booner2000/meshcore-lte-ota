@@ -45,6 +45,8 @@ Radio administration continues through MeshCore's existing admin authorization. 
 
 See [the signed update protocol](docs/update-protocol.md) for the server contract and boot safety rules.
 
+See [transfer measurements](docs/transfer-performance.md) for tested baud rates, data overhead, compression potential and the reset-recovery prerequisite for higher production speeds.
+
 URL changes are admin commands, take effect for the next job, survive reboot and are rejected while a job or boot health check is active. The maximum base URL length is 112 characters; credentials, query strings, fragments and unsafe path characters are rejected. The new server must use the existing trusted CA and firmware signing key. Changing the URL does not change trust settings. Manifest, firmware and report routes all follow the configured base path. The URL extension has native regression coverage and is compiled; on-device persistence and a move to another HTTPS host still require hardware validation.
 
 ## Tests and maintenance

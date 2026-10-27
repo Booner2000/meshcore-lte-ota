@@ -21,6 +21,6 @@ for name in sorted(set(filter(None, names))):
         raise SystemExit('Review potential private material: ' + name)
     for url in re.findall(r'https?://[^\s"<>]+', text):
         host = urlsplit(url.rstrip(').,')).hostname or ''
-        if host not in {'', 'github.com', 'docs.espressif.com', '192.0.2.1', '::1'} and not host.endswith('.invalid'):
+        if host not in {'', 'github.com', 'docs.espressif.com', 'files.waveshare.com', '192.0.2.1', '::1'} and not host.endswith('.invalid'):
             raise SystemExit('Review non-example service address: ' + name)
 print('PASS: publication source, configuration and address checks')
