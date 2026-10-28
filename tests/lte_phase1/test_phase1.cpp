@@ -424,9 +424,9 @@ static void testBaudRecovery() {
 int main() {
   {WifiDiagnostics d;char reply[151]={};d.format(reply,sizeof(reply));
    CHECK(strstr(reply,"stage=none phase=none")!=nullptr);
-   d.stage=1;d.phase=2;d.http=200;d.tls=48;d.expected=498;d.received=123;d.elapsed=5001;d.rssi=-69;
+   d.stage=1;d.phase=2;d.http=200;d.tls=48;d.expected=498;d.received=123;d.elapsed=5001;d.rssi=-69;d.cause=4;
    d.format(reply,sizeof(reply));CHECK(strstr(reply,"stage=manifest phase=body http=200 tls_raw=48")!=nullptr);
-   CHECK(strstr(reply,"rx=123/498 ms=5001 rssi=-69")!=nullptr);CHECK(strlen(reply)<150);
+   CHECK(strstr(reply,"rx=123/498 ms=5001 rssi=-69")!=nullptr);CHECK(strlen(reply)<150);CHECK(strstr(reply,"why=timeout")!=nullptr);
    char tiny[9];memset(tiny,0x55,sizeof(tiny));d.format(tiny,8);CHECK(tiny[7]==0 && tiny[8]==0x55);
    d.stage=99;d.phase=99;d.format(reply,sizeof(reply));CHECK(strstr(reply,"stage=none phase=none")!=nullptr);
   }

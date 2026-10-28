@@ -148,7 +148,8 @@ This does not fix a stalled server or weaken the protected configuration service
 
 `wifi update diag` returns the last firmware HTTP transaction's stage, header/body
 phase, HTTP result, raw TLS result, received/expected bytes, elapsed milliseconds
-and RSSI. Positive `tls_raw` values are successful SDK socket descriptors, not
+and RSSI. `why` distinguishes link loss, socket closure, body timeout, cancellation
+and HTTP failures. Positive `tls_raw` values are successful SDK socket descriptors, not
 certificate errors. The snapshot remains available after a failed job until the
 next firmware request; it is RAM-only and clears on reboot. During a running job
 fields may reflect adjacent instants. The command uses existing admin authorization,
