@@ -155,3 +155,30 @@ next firmware request; it is RAM-only and clears on reboot. During a running job
 fields may reflect adjacent instants. The command uses existing admin authorization,
 works during jobs, does not start networking, and never includes URLs, public-key
 query parameters, SSIDs, passwords or WLAN management traffic.
+
+A successful report may show `phase=headers http=200 rx=0/12`: the 12-byte JSON
+acknowledgement is not consumed by the existing report path. This is not an
+empty firmware download. Elapsed milliseconds include connection/TLS setup
+and HTTP processing, so they do not isolate server header latency.
+
+## Qualification 2026-10-28
+
+The externally powered XIAO/Wio/A7670E bench unit installed .10 through exactly
+one user-authorized LTE update. The server served 1,362,064 firmware bytes over
+42 ranges, with no extra firmware range. The device reported successful
+validation and boot health; the radio CLI confirmed app0 VALID (state 2),
+pending 0 and release floor 13. Protocol overhead is additional to file bytes.
+
+The subsequent `start wifi download` test served the same 1,362,064-byte app in
+one complete WLAN response. Device status was IDLE, 100%, done 1, err NONE,
+cleanup NONE, via wifi, with successful SHA-256 reporting. The report transaction
+took 946 ms including connection setup at RSSI -72 dBm. This was a download-only
+test: it neither installed another image nor used LTE firmware data. It proves
+the .10 WLAN transfer/report path, not a separate .10 WLAN OTA installation.
+
+801 portable checks and 12 source credential-boundary checks passed; the local
+firmware build and published code CI passed. The temporary CPU powersaving
+change was restored to ON by the radio administrator. USB still did not provide
+CLI data after radio reboot, so radio diagnostics were added. The earlier server
+I/O stall was no longer present during the successful tests. Intermittent WLAN
+failures before these tests were not conclusively assigned to one RF cause.

@@ -4,7 +4,7 @@ Update extension for the Seeed XIAO ESP32-S3 with Wio-SX1262 and SIMCom A7670E. 
 
 ## Current status
 
-**Version .8 changes only firmware authenticity checks.** Firmware HTTPS intentionally skips certificate verification and manifests no longer require signatures. The separate WLAN-credential service still requires device authentication and valid server certificates. Previous .7 hardware qualification covered signed WLAN installation, WLAN-first routing, bounded LTE fallback, flash readback, boot health confirmation, installation reporting and rollback. The changed .8 policy needs separate hardware qualification. See the [WLAN qualification](docs/wifi-updates.md#hardware-qualification-2026-10-27) and [earlier LTE report](docs/hardware-tests.md) for results and limits. Battery operation and supply switching are not qualified. Installation commands perform real OTA when `LTE_REAL_OTA=1`; the base environment retains simulation.
+**Version .10 passed a real LTE OTA installation and a full WLAN download on the externally powered bench setup.** The LTE image was validated, boot-confirmed and reported installed; the WLAN download passed SHA-256 and reporting without another installation. Firmware HTTPS intentionally skips certificate verification and manifests do not require signatures. The separate WLAN-credential service still requires device authentication and valid server certificates. See [current qualification](docs/wifi-updates.md#qualification-2026-10-28) and [earlier WLAN OTA/rollback tests](docs/wifi-updates.md#hardware-qualification-2026-10-27) for the exact scope. Battery operation and supply switching remain unqualified. Installation commands perform real OTA when `LTE_REAL_OTA=1`; the base environment retains simulation.
 
 The operating web service and deployment configuration are not included in this initial firmware-only repository. The download client expects the manifest, firmware range and report endpoints under `/meshcoreupdate/api/v1/`.
 
@@ -39,6 +39,7 @@ Local configuration files, firmware binaries and build directories are ignored. 
 - `lte update url https://updates.example.invalid/meshcoreupdate` — persist a new base URL in NVS
 - `lte update url reset` — restore the build default
 - `lte update status`, `lte update cancel`
+- `wifi update diag` - last firmware HTTP transaction diagnostics; no networking or credential output
 
 Radio administration continues through MeshCore's existing admin authorization. Device requests use the public MeshCore key and name, without a device token. Such identity is spoofable and must not be treated as cryptographic device authentication.
 
