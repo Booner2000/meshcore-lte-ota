@@ -289,6 +289,7 @@ void setStationIdentity(const uint8_t* key, const char* name, uint32_t utc) {
 bool serviceCommand(const char* command, char* reply, size_t capacity) {
   Service& self = service();
   if(wifiProvisioningActive() && (!strncmp(command,"lte ",4) || !strncmp(command,"wifi ",5) || !strncmp(command,"start ",6) || !strncmp(command,"update ",7))){snprintf(reply,capacity,"BUSY USB provisioning");return true;}
+  if(commandEquals(command,"wifi update diag")){wifiUpdateDiagnostics(reply,capacity);return true;}
   if(commandEquals(command,"wifi update status")){
     if(serviceBusy()){snprintf(reply,capacity,"BUSY: configuration unchanged");return true;}
     WifiConfig config;const bool ready=config.load();snprintf(reply,capacity,"WIFI configured=%u networks=%u version=%lu active=%u",ready,config.count,static_cast<unsigned long>(config.version),WiFi.isConnected());return true;

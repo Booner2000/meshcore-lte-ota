@@ -143,3 +143,14 @@ on success, and `WiFiClientSecure::lastError` retains it. A later HTTP timeout
 network/HTTP failure; genuine negative certificate errors remain TLS_CONFIG.
 HTTP header waits remain bounded, increased from 5 to 20 seconds.
 This does not fix a stalled server or weaken the protected configuration service.
+
+## Radio diagnostics (.10)
+
+`wifi update diag` returns the last firmware HTTP transaction's stage, header/body
+phase, HTTP result, raw TLS result, received/expected bytes, elapsed milliseconds
+and RSSI. Positive `tls_raw` values are successful SDK socket descriptors, not
+certificate errors. The snapshot remains available after a failed job until the
+next firmware request; it is RAM-only and clears on reboot. During a running job
+fields may reflect adjacent instants. The command uses existing admin authorization,
+works during jobs, does not start networking, and never includes URLs, public-key
+query parameters, SSIDs, passwords or WLAN management traffic.

@@ -7,6 +7,8 @@
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 namespace lte {
+// Last firmware HTTP transaction only; never contains WLAN-management secrets.
+void wifiUpdateDiagnostics(char* reply,size_t capacity);
 class WifiConnection {
   Platform& platform;Cancellation& cancel;bool owned=false,oldReconnect=false,oldSleep=true;
 public:
@@ -19,7 +21,7 @@ class WifiHttp : public UpdateHttp {
   UpdateEndpoint endpoint;
   Platform& platform;Cancellation& cancel;
   WiFiClientSecure client;HTTPClient http;
-  char identity[192]={};uint32_t readOffset=0;
+  char identity[192]={};uint32_t readOffset=0,requestStarted=0;
   bool begin(const char* route);
   bool response(int status,int expected);
 public:

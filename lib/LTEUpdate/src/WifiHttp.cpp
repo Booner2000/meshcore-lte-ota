@@ -7,8 +7,10 @@
 #include <mbedtls/ssl.h>
 #include <mbedtls/net_sockets.h>
 #include <algorithm>
+#include "WifiDiagnostics.h"
 namespace lte {
 namespace {
+WifiDiagnostics diagnostics;
 Error tlsError(WiFiClientSecure& client){
   char unused[8];int error=client.lastError(unused,sizeof(unused));
   if(error==MBEDTLS_ERR_SSL_TIMEOUT || error==MBEDTLS_ERR_NET_CONN_RESET ||
@@ -20,14 +22,14 @@ bool setClock(Platform& p){
   uint32_t utc=p.currentUtc();if(utc<1767225600 || utc>2524608000)return false;
   timeval now={static_cast<time_t>(utc),0};return settimeofday(&now,nullptr)==0;
 }
-bool readExact(HTTPClient& http,Platform& p,Cancellation& cancel,uint8_t* out,size_t count){
+bool readExact(HTTPClient& http,Platform& p,Cancellation& cancel,uint8_t* out,size_t count,size_t* received=nullptr){
   WiFiClient* stream=http.getStreamPtr();size_t got=0;uint32_t last=p.nowMs();
   while(got<count){
     if(cancel.cancelled())return false;
     int available=stream->available();
     if(available>0){
       int n=stream->read(out+got,std::min(size_t(available),count-got));
-      if(n>0){got+=n;last=p.nowMs();continue;}
+      if(n>0){got+=n;if(received)*received=got;last=p.nowMs();continue;}
     }
     if(!WiFi.isConnected() || (!stream->connected() && !stream->available()) || p.nowMs()-last>5000)return false;
     p.waitMs(5);
@@ -42,6 +44,7 @@ void secure(WiFiClientSecure& client,HTTPClient& http,bool verifyPeer=true){
   http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
 }
 }
+void wifiUpdateDiagnostics(char* reply,size_t capacity){diagnostics.format(reply,capacity);}
 WifiConnection::~WifiConnection(){
   if(owned){WiFi.scanDelete();WiFi.setSleep(oldSleep);WiFi.disconnect(false,false);WiFi.mode(WIFI_OFF);WiFi.setAutoReconnect(oldReconnect);}
 }
@@ -125,12 +128,19 @@ bool WifiHttp::begin(const char* route){
   close();failure=Error::None;readOffset=0;
   if(cancel.cancelled()){failure=Error::Cancelled;return false;}
   char url[360];if(!endpoint.apiUrl(url,sizeof(url),route,identity)){failure=Error::BadConfig;return false;}
+  requestStarted=platform.nowMs();
+  diagnostics.stage=!strcmp(route,"manifest")?1:!strcmp(route,"report")?3:2;
+  diagnostics.phase=1;diagnostics.http=0;diagnostics.tls=0;diagnostics.received=0;
+  diagnostics.expected=0;diagnostics.elapsed=0;diagnostics.rssi=WiFi.RSSI();
   secure(client,http,false);
   if(!http.begin(client,url)){failure=Error::BadConfig;return false;}
   const char* headers[]={"Content-Encoding","Content-Range","Transfer-Encoding"};http.collectHeaders(headers,3);
   http.addHeader("Accept-Encoding","identity");return true;
 }
 bool WifiHttp::response(int status,int expected){
+  char tlsText[8];diagnostics.http=status;diagnostics.tls=client.lastError(tlsText,sizeof(tlsText));
+  diagnostics.elapsed=platform.nowMs()-requestStarted;
+  const int length=http.getSize();diagnostics.expected=length>0?uint32_t(length):0;
   if(cancel.cancelled()){failure=Error::Cancelled;return false;}
   if(status<0){
     char ignored[8],message[80];int error=client.lastError(ignored,sizeof(ignored));
@@ -160,8 +170,11 @@ bool WifiHttp::get(const char* route,int start,int end){
 }
 bool WifiHttp::readBody(uint32_t offset,uint8_t* data,size_t count){
   if(offset!=readOffset || readOffset>actionLength || count>actionLength-readOffset){failure=Error::BadResponse;return false;}
-  if(!readExact(http,platform,cancel,data,count)){failure=cancel.cancelled()?Error::Cancelled:Error::NetworkUnavailable;return false;}
-  readOffset+=count;return true;
+  size_t received=0;diagnostics.phase=2;
+  const bool ok=readExact(http,platform,cancel,data,count,&received);
+  diagnostics.received=readOffset+received;diagnostics.elapsed=platform.nowMs()-requestStarted;
+  if(!ok){failure=cancel.cancelled()?Error::Cancelled:Error::NetworkUnavailable;return false;}
+  readOffset+=count;if(readOffset==actionLength)diagnostics.phase=3;return true;
 }
 bool WifiHttp::post(const char* payload){
   if(!begin("report"))return false;http.addHeader("Content-Type","application/json");
